@@ -886,6 +886,117 @@ class ZohoProjectsServer {
 						},
 					},
 				},
+
+				// Teams
+				{
+					name: 'get_team_details',
+					description: 'Retrieve team details from the Zoho Projects portal',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							id: { type: 'string', description: 'Team ID (optional)' },
+							search_term: {
+								type: 'string',
+								description: 'Search by team name (optional)',
+							},
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
+							},
+							last_modified_time: {
+								type: 'string',
+								description: 'Last modification time filter (optional)',
+							},
+							sort_by: {
+								type: 'string',
+								description: 'Sort order, e.g., "desc(name)" or "asc(name)"',
+							},
+						},
+					},
+				},
+				{
+					name: 'get_projects_team',
+					description: 'Retrieve teams from a specific project',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							id: { type: 'string', description: 'Team ID (optional)' },
+							search_term: {
+								type: 'string',
+								description: 'Search by team name (optional)',
+							},
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
+							},
+							last_modified_time: {
+								type: 'string',
+								description: 'Last modification time filter (optional)',
+							},
+							sort_by: {
+								type: 'string',
+								description: 'Sort order, e.g., "desc(name)" or "asc(name)"',
+							},
+						},
+						required: ['project_id'],
+					},
+				},
+				{
+					name: 'get_team_users',
+					description: 'Retrieve users from one or more teams',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							team_ids: {
+								type: 'string',
+								description:
+									'Comma-separated team IDs as JSON array string, e.g., "[4000000062001,4000000015029]"',
+							},
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
+							},
+							last_modified_time: {
+								type: 'string',
+								description: 'Last modification time filter (optional)',
+							},
+						},
+					},
+				},
+				{
+					name: 'get_teams_projects',
+					description: 'Retrieve projects associated with one or more teams',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							team_ids: {
+								type: 'string',
+								description:
+									'Comma-separated team IDs as JSON array string, e.g., "[4000000062001,4000000015029]"',
+							},
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
+							},
+							last_modified_time: {
+								type: 'string',
+								description: 'Last modification time filter (optional)',
+							},
+						},
+					},
+				},
 			],
 		}));
 
@@ -993,6 +1104,16 @@ class ZohoProjectsServer {
 					// Users
 					case 'list_users':
 						return await this.listUsers(params.project_id);
+
+					// Teams
+					case 'get_team_details':
+						return await this.getTeamDetails(params);
+					case 'get_projects_team':
+						return await this.getProjectsTeam(params);
+					case 'get_team_users':
+						return await this.getTeamUsers(params);
+					case 'get_teams_projects':
+						return await this.getTeamsProjects(params);
 
 					default:
 						throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -1537,6 +1658,79 @@ class ZohoProjectsServer {
 		const endpoint = projectId
 			? `/portal/${this.config.portalId}/projects/${projectId}/users`
 			: `/portal/${this.config.portalId}/users`;
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	// Teams operations
+	private async getTeamDetails(params: any) {
+		const queryParams = new URLSearchParams();
+		if (params.id) queryParams.append('id', params.id);
+		if (params.search_term) queryParams.append('search_term', params.search_term);
+		if (params.page) queryParams.append('page', params.page.toString());
+		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+		if (params.last_modified_time)
+			queryParams.append('last_modified_time', params.last_modified_time);
+		if (params.sort_by) queryParams.append('sort_by', params.sort_by);
+
+		const endpoint = `/portal/${this.config.portalId}/teams${
+			queryParams.toString() ? `?${queryParams.toString()}` : ''
+		}`;
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async getProjectsTeam(params: any) {
+		const queryParams = new URLSearchParams();
+		if (params.id) queryParams.append('id', params.id);
+		if (params.search_term) queryParams.append('search_term', params.search_term);
+		if (params.page) queryParams.append('page', params.page.toString());
+		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+		if (params.last_modified_time)
+			queryParams.append('last_modified_time', params.last_modified_time);
+		if (params.sort_by) queryParams.append('sort_by', params.sort_by);
+
+		const endpoint = `/portal/${this.config.portalId}/projects/${params.project_id}/teams${
+			queryParams.toString() ? `?${queryParams.toString()}` : ''
+		}`;
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async getTeamUsers(params: any) {
+		const queryParams = new URLSearchParams();
+		if (params.team_ids) queryParams.append('team_ids', params.team_ids);
+		if (params.page) queryParams.append('page', params.page.toString());
+		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+		if (params.last_modified_time)
+			queryParams.append('last_modified_time', params.last_modified_time);
+
+		const endpoint = `/portal/${this.config.portalId}/teams/users${
+			queryParams.toString() ? `?${queryParams.toString()}` : ''
+		}`;
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async getTeamsProjects(params: any) {
+		const queryParams = new URLSearchParams();
+		if (params.team_ids) queryParams.append('team_ids', params.team_ids);
+		if (params.page) queryParams.append('page', params.page.toString());
+		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+		if (params.last_modified_time)
+			queryParams.append('last_modified_time', params.last_modified_time);
+
+		const endpoint = `/portal/${this.config.portalId}/teams/projects${
+			queryParams.toString() ? `?${queryParams.toString()}` : ''
+		}`;
 		const data = await this.makeRequest(endpoint);
 		return {
 			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],

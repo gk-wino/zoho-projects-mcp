@@ -41,6 +41,13 @@ A Model Context Protocol (MCP) server that provides integration with Zoho Projec
 - **User Management**
   - List users in portal or project
 
+- **Teams Management** (ZohoProjects.teams.READ)
+  - Get team details from portal
+  - Get teams from a specific project
+  - Get users associated with teams
+  - Get projects associated with teams
+  - See [Teams API Documentation](docs/TEAMS_API.md) for detailed usage
+
 ## Prerequisites
 
 1. **Node.js** (v18 or higher)
@@ -67,9 +74,10 @@ A Model Context Protocol (MCP) server that provides integration with Zoho Projec
 #### Step 2: Generate Authorization Code
 
 1. Build the authorization URL with required scopes:
+
    ```
    https://accounts.zoho.{REGION}/oauth/v2/auth?
-     scope=ZohoProjects.portals.ALL,ZohoProjects.projects.ALL,ZohoProjects.tasks.ALL,ZohoProjects.bugs.ALL,ZohoProjects.milestones.ALL,ZohoProjects.users.READ,ZohoSearch.securesearch.READ
+     scope=ZohoProjects.portals.ALL,ZohoProjects.projects.ALL,ZohoProjects.tasks.ALL,ZohoProjects.bugs.ALL,ZohoProjects.milestones.ALL,ZohoProjects.users.READ,ZohoProjects.teams.READ,ZohoSearch.securesearch.READ
      &client_id=YOUR_CLIENT_ID
      &response_type=code
      &access_type=offline
@@ -105,28 +113,32 @@ curl -X POST https://accounts.zoho.{REGION}/oauth/v2/token \
 ```
 
 Response will contain:
+
 ```json
 {
-  "access_token": "1000.xxxx.yyyy",
-  "refresh_token": "1000.zzzz.aaaa",
-  "expires_in": 3600,
-  "api_domain": "https://www.zohoapis.in",
-  "token_type": "Bearer"
+	"access_token": "1000.xxxx.yyyy",
+	"refresh_token": "1000.zzzz.aaaa",
+	"expires_in": 3600,
+	"api_domain": "https://www.zohoapis.in",
+	"token_type": "Bearer"
 }
 ```
 
 **Important:** Save both tokens:
+
 - **access_token**: Valid for 1 hour (auto-refreshed by the server)
 - **refresh_token**: Long-lived, used to get new access tokens
 
 #### Step 4: Find Your Portal ID
 
 **Method 1: From URL**
+
 1. Go to your Zoho Projects in browser
 2. Look at the URL: `https://projects.zoho.{REGION}/portal/{PORTAL_ID}/...`
 3. The number after `/portal/` is your Portal ID (e.g., `60028147039`)
 
 **Method 2: Using API**
+
 ```bash
 curl -X GET https://projectsapi.zoho.{REGION}/api/v3/portals \
   -H "Authorization: Zoho-oauthtoken YOUR_ACCESS_TOKEN"
@@ -137,6 +149,7 @@ Response will list all your portals with their IDs.
 #### Step 5: Verify Credentials
 
 Test your setup with this API call:
+
 ```bash
 curl -X GET https://projectsapi.zoho.{REGION}/api/v3/portal/YOUR_PORTAL_ID/projects \
   -H "Authorization: Zoho-oauthtoken YOUR_ACCESS_TOKEN"
@@ -148,12 +161,14 @@ curl -X GET https://projectsapi.zoho.{REGION}/api/v3/portal/YOUR_PORTAL_ID/proje
 #### Required Scopes Summary
 
 Make sure your OAuth token has these scopes:
+
 - ✅ `ZohoProjects.portals.ALL` - Portal operations
 - ✅ `ZohoProjects.projects.ALL` - Project management
 - ✅ `ZohoProjects.tasks.ALL` - Task management
 - ✅ `ZohoProjects.bugs.ALL` - Issue/bug management
 - ✅ `ZohoProjects.milestones.ALL` - Milestone/phase management
 - ✅ `ZohoProjects.users.READ` - User information
+- ✅ `ZohoProjects.teams.READ` - Teams information (read-only)
 - ✅ `ZohoSearch.securesearch.READ` - Search functionality
 
 ### 2. Setup and Installation
@@ -208,11 +223,13 @@ docker-compose logs -f
 #### Node.js Setup
 
 **Prerequisites:**
+
 - Node.js (v18 or higher)
 
 **Steps:**
 
 1. Clone and install:
+
 ```bash
 git clone <repository-url>
 cd zoho-mcp
@@ -223,6 +240,7 @@ npm run build
 2. Create `.env` file with your credentials (see Configuration section below)
 
 3. Run the server:
+
 ```bash
 # Stdio server (for local MCP clients)
 npm start
@@ -256,6 +274,7 @@ ALLOWED_HOSTS=127.0.0.1,localhost
 ```
 
 **Region-specific domains:**
+
 - US: `projectsapi.zoho.com` / `accounts.zoho.com`
 - EU: `projectsapi.zoho.eu` / `accounts.zoho.eu`
 - IN: `projectsapi.zoho.in` / `accounts.zoho.in`
@@ -270,23 +289,24 @@ Add to your Claude Desktop configuration file:
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 #### For Node.js Setup:
+
 ```json
 {
-  "mcpServers": {
-    "zoho-projects": {
-      "command": "node",
-      "args": ["/absolute/path/to/zoho-mcp/dist/index.js"],
-      "env": {
-        "ZOHO_ACCESS_TOKEN": "your_access_token_here",
-        "ZOHO_REFRESH_TOKEN": "your_refresh_token_here",
-        "ZOHO_CLIENT_ID": "your_client_id_here",
-        "ZOHO_CLIENT_SECRET": "your_client_secret_here",
-        "ZOHO_PORTAL_ID": "your_portal_id_here",
-        "ZOHO_API_DOMAIN": "https://projectsapi.zoho.in",
-        "ZOHO_ACCOUNTS_DOMAIN": "https://accounts.zoho.in"
-      }
-    }
-  }
+	"mcpServers": {
+		"zoho-projects": {
+			"command": "node",
+			"args": ["/absolute/path/to/zoho-mcp/dist/index.js"],
+			"env": {
+				"ZOHO_ACCESS_TOKEN": "your_access_token_here",
+				"ZOHO_REFRESH_TOKEN": "your_refresh_token_here",
+				"ZOHO_CLIENT_ID": "your_client_id_here",
+				"ZOHO_CLIENT_SECRET": "your_client_secret_here",
+				"ZOHO_PORTAL_ID": "your_portal_id_here",
+				"ZOHO_API_DOMAIN": "https://projectsapi.zoho.in",
+				"ZOHO_ACCOUNTS_DOMAIN": "https://accounts.zoho.in"
+			}
+		}
+	}
 }
 ```
 
@@ -316,31 +336,37 @@ docker build -t zoho-mcp-stdio .
 Once configured, you can use Claude to interact with Zoho Projects:
 
 ### List Projects
+
 ```
 Can you list all my Zoho Projects?
 ```
 
 ### Create a New Project
+
 ```
 Create a new project called "Website Redesign" with description "Redesign company website" starting on 2025-01-15 and ending on 2025-03-31
 ```
 
 ### List Tasks
+
 ```
 Show me all tasks in project ID 1234567890
 ```
 
 ### Create a Task
+
 ```
 Create a high priority task called "Design homepage mockup" in project 1234567890, due on 2025-02-15
 ```
 
 ### Search
+
 ```
 Search for "bug fix" in all modules
 ```
 
 ### List Issues
+
 ```
 Show me all issues in project 1234567890
 ```
@@ -385,16 +411,19 @@ The server provides the following MCP tools:
 ## Troubleshooting
 
 ### Authentication Issues
+
 - Ensure your access token is valid and not expired
 - Verify the token has the required scopes
 - Check that the portal ID is correct
 
 ### API Errors
+
 - Check the Zoho API documentation for rate limits
 - Ensure you're using the correct API domain for your region
 - Verify that the user has appropriate permissions
 
 ### Connection Issues
+
 - Restart Claude Desktop after configuration changes
 - Check the Claude Desktop logs for error messages
 - Verify the server path in the configuration
@@ -402,9 +431,11 @@ The server provides the following MCP tools:
 ## OAuth Token Management
 
 ### Token Expiration
+
 Access tokens expire after 1 hour (3600 seconds). This MCP server automatically refreshes tokens using the refresh token.
 
 ### Manual Token Refresh
+
 If you need to manually refresh your access token:
 
 ```bash
@@ -423,17 +454,19 @@ curl -X POST https://accounts.zoho.in/oauth/v2/token \
 ```
 
 Response example:
+
 ```json
 {
-  "access_token": "1000.xxx.yyy",
-  "scope": "ZohoProjects.portals.ALL ZohoProjects.projects.ALL...",
-  "api_domain": "https://www.zohoapis.in",
-  "token_type": "Bearer",
-  "expires_in": 3600
+	"access_token": "1000.xxx.yyy",
+	"scope": "ZohoProjects.portals.ALL ZohoProjects.projects.ALL...",
+	"api_domain": "https://www.zohoapis.in",
+	"token_type": "Bearer",
+	"expires_in": 3600
 }
 ```
 
 ### Automatic Token Refresh
+
 The MCP server automatically handles token refresh. Configure the following environment variables:
 
 ```bash
@@ -461,6 +494,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ## Support
 
 For issues related to:
+
 - **MCP Server**: Open an issue in this repository
 - **Zoho Projects API**: Contact Zoho support or check their documentation
 - **Claude Desktop**: Check Anthropic's documentation
