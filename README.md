@@ -48,6 +48,12 @@ A Model Context Protocol (MCP) server that provides integration with Zoho Projec
   - Get projects associated with teams
   - See [Teams API Documentation](docs/TEAMS_API.md) for detailed usage
 
+- **Tags Management**
+  - List all tags in portal
+  - Filter tags by name
+  - Delete tags
+  - See [Tags API Documentation](docs/TAGS_API.md) for detailed usage
+
 ## Prerequisites
 
 1. **Node.js** (v18 or higher)

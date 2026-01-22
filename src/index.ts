@@ -1173,6 +1173,32 @@ class ZohoProjectsServer {
 						},
 					},
 				},
+
+				// Tags operations
+				{
+					name: 'list_tags',
+					description: 'List all tags in a portal',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							name: {
+								type: 'string',
+								description: 'Filter tags by name (optional)',
+							},
+						},
+					},
+				},
+				{
+					name: 'delete_tag',
+					description: 'Delete a tag from the portal',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							tag_id: { type: 'string', description: 'Tag ID' },
+						},
+						required: ['tag_id'],
+					},
+				},
 			],
 		}));
 
@@ -1310,6 +1336,12 @@ class ZohoProjectsServer {
 						return await this.getTeamUsers(params);
 					case 'get_teams_projects':
 						return await this.getTeamsProjects(params);
+
+					// Tags
+					case 'list_tags':
+						return await this.listTags(params.name);
+					case 'delete_tag':
+						return await this.deleteTag(params.tag_id);
 
 					default:
 						throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -2117,6 +2149,36 @@ class ZohoProjectsServer {
 		const data = await this.makeRequest(endpoint);
 		return {
 			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	// Tags operations
+	private async listTags(name?: string) {
+		const queryParams = new URLSearchParams();
+		if (name) queryParams.append('name', name);
+
+		const endpoint = `/portal/${this.config.portalId}/tags${
+			queryParams.toString() ? `?${queryParams.toString()}` : ''
+		}`;
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async deleteTag(tagId: string) {
+		const endpoint = `/portal/${this.config.portalId}/tags/${tagId}`;
+		await this.makeRequest(endpoint, 'DELETE');
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify({
+						success: true,
+						message: `Tag ${tagId} deleted successfully`,
+					}),
+				},
+			],
 		};
 	}
 
