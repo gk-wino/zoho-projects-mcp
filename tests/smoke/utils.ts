@@ -42,6 +42,7 @@ export function loadEnv() {
 		portalId: process.env.ZOHO_PORTAL_ID!,
 		apiDomain: process.env.ZOHO_API_DOMAIN || 'https://projectsapi.zoho.com',
 		accountsDomain: process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.com',
+		printTokenOnRefresh: process.env.PRINT_TOKEN_ON_REFRESH === 'true' ? true : false,
 	};
 }
 

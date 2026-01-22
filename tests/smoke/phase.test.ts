@@ -426,6 +426,68 @@ async function testDeletePhase(client: Client, projectId: string, phaseId: strin
 	}
 }
 
+async function cleanupTestPhases(client: Client, projectId: string) {
+	const testName = 'cleanup_test_phases';
+	logTestStart(testName);
+
+	try {
+		// List all phases in the project
+		const response = await callTool(client, 'list_phases', {
+			project_id: projectId,
+			page: 1,
+			per_page: 100,
+		});
+		const data = parseToolResponse(response);
+
+		if (!data.milestones || data.milestones.length === 0) {
+			console.log('\n✅ No phases found to clean up');
+			logTestSuccess(testName);
+			return;
+		}
+
+		// Find phases matching "Updated Test Phase"
+		const phasesToDelete = data.milestones.filter(
+			(phase: any) => phase.name === 'Updated Test Phase',
+		);
+
+		if (phasesToDelete.length === 0) {
+			console.log('\n✅ No "Updated Test Phase" phases found to clean up');
+			logTestSuccess(testName);
+			return;
+		}
+
+		console.log(`\nFound ${phasesToDelete.length} phase(s) to clean up:`);
+
+		let deletedCount = 0;
+		let skippedCount = 0;
+
+		for (const phase of phasesToDelete) {
+			try {
+				await callTool(client, 'delete_phase', {
+					project_id: projectId,
+					phase_id: phase.id,
+				});
+				console.log(`  ✅ Deleted: "${phase.name}" (ID: ${phase.id})`);
+				deletedCount++;
+				await wait(300); // Small delay between deletions
+			} catch (error: any) {
+				console.log(`  ⚠️  Skipped: "${phase.name}" (ID: ${phase.id}) - ${error.message}`);
+				skippedCount++;
+			}
+		}
+
+		console.log(`\n📊 Cleanup Summary:`);
+		console.log(`   Total phases found: ${phasesToDelete.length}`);
+		console.log(`   Deleted: ${deletedCount}`);
+		console.log(`   Skipped: ${skippedCount}`);
+
+		logTestSuccess(testName);
+	} catch (error) {
+		logTestFailure(testName, error);
+		// Don't throw - cleanup failures shouldn't fail the entire test suite
+	}
+}
+
 async function runPhaseSmokeTests() {
 	console.log('\n🚀 Starting Phase Smoke Tests\n');
 	let client: Client | null = null;
@@ -489,6 +551,10 @@ async function runPhaseSmokeTests() {
 
 		// Cleanup: delete the test phase
 		await testDeletePhase(client, testProject.projectId, createdPhaseId);
+		await wait(500);
+
+		// Cleanup: remove all "Updated Test Phase" phases
+		await cleanupTestPhases(client, testProject.projectId);
 		await wait(500);
 
 		// Summary
