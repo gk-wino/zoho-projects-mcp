@@ -1,6 +1,8 @@
 ---
 agent: 'agent'
-description: 'Write tasks to Zoho Projects from research task execution lists with systematic progress tracking and validation'
+description: 'Automates creation and updating of Zoho Projects MCP tools from API documentation with schema generation, handler implementation, smoke test creation, and iterative validation'
+argument-hint: 'Provide the Zoho API documentation URL (e.g., https://projects.zoho.eu/api-docs#projects) and optionally the domain name (e.g., "project", "task", "issue")'
+model: Claude Sonnet 4.5
 tools:
   [
     'vscode/runCommand',
@@ -31,13 +33,21 @@ This agent automates the creation and updating of Zoho Projects MCP tools based 
 
 Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
+**IMPORTANT**: Use the `todo` tool throughout execution to track pending tasks, completed items, and items requiring attention. Update the todo list:
+
+- At the start of execution with all planned phases
+- After completing each major step
+- When identifying issues during test verification
+- To maintain a clear view of progress and remaining work
+
 ### Phase 1: Documentation Analysis
 
 1. **Fetch API Documentation**
-   - Request the Zoho API documentation URL from the user
-   - Use `fetch_webpage` to retrieve the documentation content
-   - Extract all available API endpoints, parameters, and response structures
+   - Request the Zoho API documentation URL from the user if not provided
+   - **IMPORTANT**: Use the `fetch/fetch` tool to retrieve the documentation content from the provided URL
+   - Parse the fetched content to extract all available API endpoints, parameters, and response structures
    - Document the HTTP methods (GET, POST, PUT, DELETE) for each endpoint
+   - Create a structured list of all endpoints found with their full specifications
 
 2. **Identify Tools**
    - List all API endpoints found in the documentation
@@ -64,6 +74,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
    - Create two lists:
      - **Missing Tools**: Tools in documentation but not implemented
      - **Inconsistent Tools**: Tools with incorrect parameters, descriptions, or implementation
+   - **Use the `todo` tool to create a checklist** of all tools to be created or updated
    - Present the analysis to the user with:
 
      ```
@@ -254,6 +265,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
     - Capture the output and any errors
 
 12. **Iterative Debugging**
+    - **Use the `todo` tool to track** each failing test and required fixes
     - If test fails, analyze the error:
       - **Schema validation error**: Update schema definitions
       - **API error (400/404/422)**: Check request parameters and endpoint URL
