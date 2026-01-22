@@ -185,11 +185,20 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 	try {
 		const htmlDescription = `
 			<p>Inline code example: <code>const variable = 'value';</code></p>
+			<p><br/></p>
 			<p>Code block example:</p>
-			<pre><code>function example() {
-  console.log('Hello, World!');
-  return true;
-}</code></pre>
+			<div>
+				<p><br/></p>
+				<ol class="code"><br/></ol>
+				<p><br/></p>
+			</div>
+			<ul style="list-style-position:outside; list-style-type:decimal; padding:0 30px" dir="ltr">
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">function example() {<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  console.log('Hello, World!');<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  return true;<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">}<br/></li>
+			</ul>
+			<div><br/></div>
 			<p>Preformatted text:</p>
 			<pre>This text preserves
     spaces and
@@ -289,15 +298,23 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 				<li><em>Testing & Documentation</em></li>
 			</ol>
 			<h3>Code Example</h3>
-			<pre><code>// Sample implementation
-const handleSubmit = async (data) => {
-  try {
-    const response = await api.post('/users', data);
-    return response.data;
-  } catch (error) {
-    console.error('Error:', error);
-  }
-};</code></pre>
+			<div>
+				<p><br/></p>
+				<ol class="code"><br/></ol>
+				<p><br/></p>
+			</div>
+			<ul style="list-style-position:outside; list-style-type:decimal; padding:0 30px" dir="ltr">
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">// Sample implementation<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">const handleSubmit = async (data) => {<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  try {<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">    const response = await api.post('/users', data);<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">    return response.data;<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  } catch (error) {<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">    console.error('Error:', error);<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  }<br/></li>
+				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">};<br/></li>
+			</ul>
+			<div><br/></div>
 			<p><strong>Note:</strong> Make sure to test all edge cases before deployment.</p>
 		`;
 
@@ -351,11 +368,19 @@ const handleSubmit = async (data) => {
 		try {
 			const htmlComment2 = `
 				<p>Here's the fix for the bug:</p>
-				<pre><code>if (user.isAuthenticated()) {
-  // Allow access
-  return true;
-}
-return false;</code></pre>
+				<div>
+					<p><br/></p>
+					<ol class="code"><br/></ol>
+					<p><br/></p>
+				</div>
+				<ul style="list-style-position:outside; list-style-type:decimal; padding:0 30px" dir="ltr">
+					<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">if (user.isAuthenticated()) {<br/></li>
+					<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  // Allow access<br/></li>
+					<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">  return true;<br/></li>
+					<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">}<br/></li>
+					<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">return false;<br/></li>
+				</ul>
+				<div><br/></div>
 				<p>This should resolve the authentication issue.</p>
 			`;
 			await callTool(client, 'add_task_comment', {
