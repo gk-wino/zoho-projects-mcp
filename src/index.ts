@@ -254,12 +254,18 @@ class ZohoProjectsServer {
 						type: 'object',
 						properties: {
 							name: { type: 'string', description: 'Project name' },
-							description: { type: 'string', description: 'Project description' },
+							description: {
+								type: 'string',
+								description: 'Project description',
+							},
 							start_date: {
 								type: 'string',
 								description: 'Start date (YYYY-MM-DD)',
 							},
-							end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+							end_date: {
+								type: 'string',
+								description: 'End date (YYYY-MM-DD)',
+							},
 							is_public: {
 								type: 'boolean',
 								description: 'Is project public',
@@ -277,12 +283,18 @@ class ZohoProjectsServer {
 						properties: {
 							project_id: { type: 'string', description: 'Project ID' },
 							name: { type: 'string', description: 'Project name' },
-							description: { type: 'string', description: 'Project description' },
+							description: {
+								type: 'string',
+								description: 'Project description',
+							},
 							start_date: {
 								type: 'string',
 								description: 'Start date (YYYY-MM-DD)',
 							},
-							end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+							end_date: {
+								type: 'string',
+								description: 'End date (YYYY-MM-DD)',
+							},
 							status: {
 								type: 'string',
 								description: 'Project status',
@@ -343,14 +355,20 @@ class ZohoProjectsServer {
 					inputSchema: {
 						type: 'object',
 						properties: {
-							project_id: { type: 'string', description: 'Project ID (obtain from list_projects)' },
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
 							tasklist_id: {
 								type: 'string',
 								description:
 									'Task list ID (optional - uses general/default task list if not provided. Get from list_tasklists)',
 							},
 							name: { type: 'string', description: 'Task name (required)' },
-							description: { type: 'string', description: 'Task description (optional)' },
+							description: {
+								type: 'string',
+								description: 'Task description (optional)',
+							},
 							priority: {
 								type: 'string',
 								description: 'Task priority (optional)',
@@ -391,7 +409,10 @@ class ZohoProjectsServer {
 								description:
 									'Task list ID (optional - only provide if moving task to different task list. Get from list_tasklists)',
 							},
-							name: { type: 'string', description: 'Task name (optional - only if updating)' },
+							name: {
+								type: 'string',
+								description: 'Task name (optional - only if updating)',
+							},
 							description: {
 								type: 'string',
 								description: 'Task description (optional - only if updating)',
@@ -636,7 +657,8 @@ class ZohoProjectsServer {
 				// Issue operations
 				{
 					name: 'list_issues',
-					description: 'List issues from a project or portal',
+					description:
+						'List issues from a project or portal. Requires page and per_page parameters.',
 					inputSchema: {
 						type: 'object',
 						properties: {
@@ -644,13 +666,18 @@ class ZohoProjectsServer {
 								type: 'string',
 								description: 'Project ID (optional for portal-level)',
 							},
-							page: { type: 'number', description: 'Page number', default: 1 },
+							page: {
+								type: 'number',
+								description: 'Page number (required)',
+								default: 1,
+							},
 							per_page: {
 								type: 'number',
-								description: 'Items per page',
+								description: 'Items per page (required)',
 								default: 10,
 							},
 						},
+						required: ['page', 'per_page'],
 					},
 				},
 				{
@@ -667,40 +694,183 @@ class ZohoProjectsServer {
 				},
 				{
 					name: 'create_issue',
-					description: 'Create a new issue',
+					description: 'Create a new issue in a project',
 					inputSchema: {
 						type: 'object',
 						properties: {
 							project_id: { type: 'string', description: 'Project ID' },
-							title: { type: 'string', description: 'Issue title' },
+							name: { type: 'string', description: 'Issue name/title' },
 							description: { type: 'string', description: 'Issue description' },
-							severity: {
+							flag: {
 								type: 'string',
-								description: 'Issue severity',
-								enum: ['minor', 'major', 'critical'],
+								description: 'Issue flag type',
+								enum: ['Internal', 'External'],
 							},
-							due_date: { type: 'string', description: 'Due date (MM-DD-YYYY)' },
+							due_date: {
+								type: 'string',
+								description: 'Due date (YYYY-MM-DD)',
+							},
+							assignee_zpuid: {
+								type: 'string',
+								description: 'Assignee user ZPUID',
+							},
+							severity_id: { type: 'string', description: 'Severity ID' },
+							classification_id: {
+								type: 'string',
+								description: 'Classification ID',
+							},
+							module_id: { type: 'string', description: 'Module ID' },
 						},
-						required: ['project_id', 'title'],
+						required: ['project_id', 'name'],
 					},
 				},
 				{
 					name: 'update_issue',
-					description: 'Update an issue',
+					description: 'Update an existing issue',
 					inputSchema: {
 						type: 'object',
 						properties: {
 							project_id: { type: 'string', description: 'Project ID' },
 							issue_id: { type: 'string', description: 'Issue ID' },
-							title: { type: 'string', description: 'Issue title' },
+							name: { type: 'string', description: 'Issue name/title' },
 							description: { type: 'string', description: 'Issue description' },
-							severity: {
+							flag: {
 								type: 'string',
-								description: 'Issue severity',
-								enum: ['minor', 'major', 'critical'],
+								description: 'Issue flag type',
+								enum: ['Internal', 'External'],
+							},
+							due_date: {
+								type: 'string',
+								description: 'Due date (YYYY-MM-DD)',
+							},
+							assignee_zpuid: {
+								type: 'string',
+								description: 'Assignee user ZPUID',
+							},
+							severity_id: { type: 'string', description: 'Severity ID' },
+							classification_id: {
+								type: 'string',
+								description: 'Classification ID',
+							},
+							module_id: { type: 'string', description: 'Module ID' },
+						},
+						required: ['project_id', 'issue_id'],
+					},
+				},
+				{
+					name: 'delete_issue',
+					description: 'Delete an issue from a project',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+						},
+						required: ['project_id', 'issue_id'],
+					},
+				},
+				{
+					name: 'move_issue',
+					description: 'Move an issue to another project',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Source project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							to_project: { type: 'string', description: 'Target project ID' },
+						},
+						required: ['project_id', 'issue_id', 'to_project'],
+					},
+				},
+				{
+					name: 'clone_issue',
+					description: 'Clone an issue within the same project',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+						},
+						required: ['project_id', 'issue_id'],
+					},
+				},
+				{
+					name: 'get_issue_activities',
+					description: 'Get activities performed on an issue',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
 							},
 						},
 						required: ['project_id', 'issue_id'],
+					},
+				},
+				{
+					name: 'get_issue_comments',
+					description: 'Get all comments of an issue',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							page: { type: 'number', description: 'Page number', default: 1 },
+							per_page: {
+								type: 'number',
+								description: 'Items per page',
+								default: 10,
+							},
+						},
+						required: ['project_id', 'issue_id'],
+					},
+				},
+				{
+					name: 'add_issue_comment',
+					description: 'Add a comment to an issue',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							comment: { type: 'string', description: 'Comment content' },
+						},
+						required: ['project_id', 'issue_id', 'comment'],
+					},
+				},
+				{
+					name: 'update_issue_comment',
+					description: 'Update a comment on an issue',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							comment_id: { type: 'string', description: 'Comment ID' },
+							comment: {
+								type: 'string',
+								description: 'Updated comment content',
+							},
+						},
+						required: ['project_id', 'issue_id', 'comment_id', 'comment'],
+					},
+				},
+				{
+					name: 'delete_issue_comment',
+					description: 'Delete a comment from an issue',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							issue_id: { type: 'string', description: 'Issue ID' },
+							comment_id: { type: 'string', description: 'Comment ID' },
+						},
+						required: ['project_id', 'issue_id', 'comment_id'],
 					},
 				},
 
@@ -734,7 +904,10 @@ class ZohoProjectsServer {
 								type: 'string',
 								description: 'Start date (YYYY-MM-DD)',
 							},
-							end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+							end_date: {
+								type: 'string',
+								description: 'End date (YYYY-MM-DD)',
+							},
 							owner_zpuid: { type: 'string', description: 'Owner user ZPUID' },
 						},
 						required: ['project_id', 'name'],
@@ -812,7 +985,10 @@ class ZohoProjectsServer {
 						properties: {
 							project_id: { type: 'string', description: 'Project ID' },
 							name: { type: 'string', description: 'Task list name' },
-							milestone_id: { type: 'string', description: 'Milestone ID (optional)' },
+							milestone_id: {
+								type: 'string',
+								description: 'Milestone ID (optional)',
+							},
 							flag: {
 								type: 'string',
 								description: 'Task list flag',
@@ -1076,6 +1252,26 @@ class ZohoProjectsServer {
 						return await this.createIssue(params);
 					case 'update_issue':
 						return await this.updateIssue(params);
+					case 'delete_issue':
+						return await this.deleteIssue(params.project_id, params.issue_id);
+					case 'move_issue':
+						return await this.moveIssue(params);
+					case 'clone_issue':
+						return await this.cloneIssue(params.project_id, params.issue_id);
+					case 'get_issue_activities':
+						return await this.getIssueActivities(params);
+					case 'get_issue_comments':
+						return await this.getIssueComments(params);
+					case 'add_issue_comment':
+						return await this.addIssueComment(params);
+					case 'update_issue_comment':
+						return await this.updateIssueComment(params);
+					case 'delete_issue_comment':
+						return await this.deleteIssueComment(
+							params.project_id,
+							params.issue_id,
+							params.comment_id,
+						);
 
 					// Phase operations
 					case 'list_phases':
@@ -1474,12 +1670,38 @@ class ZohoProjectsServer {
 	}
 
 	private async createIssue(params: any) {
-		const { project_id, title, ...issueData } = params;
-		// Zoho API expects 'name' field, not 'title'
+		const { project_id, assignee_zpuid, severity_id, classification_id, module_id, ...issueData } =
+			params;
+
+		// Build request body with proper structure
+		const requestBody: any = {
+			...issueData,
+		};
+
+		// Add assignee if provided
+		if (assignee_zpuid) {
+			requestBody.assignee = { zpuid: assignee_zpuid };
+		}
+
+		// Add severity if provided
+		if (severity_id) {
+			requestBody.severity = { id: severity_id };
+		}
+
+		// Add classification if provided
+		if (classification_id) {
+			requestBody.classification = { id: classification_id };
+		}
+
+		// Add module if provided
+		if (module_id) {
+			requestBody.module = { id: module_id };
+		}
+
 		const data = await this.makeRequest(
 			`/portal/${this.config.portalId}/projects/${project_id}/issues`,
 			'POST',
-			{ name: title, ...issueData },
+			requestBody,
 		);
 		return {
 			content: [
@@ -1492,17 +1714,178 @@ class ZohoProjectsServer {
 	}
 
 	private async updateIssue(params: any) {
-		const { project_id, issue_id, ...issueData } = params;
+		const {
+			project_id,
+			issue_id,
+			assignee_zpuid,
+			severity_id,
+			classification_id,
+			module_id,
+			...issueData
+		} = params;
+
+		// Build request body with proper structure
+		const requestBody: any = {
+			...issueData,
+		};
+
+		// Add assignee if provided
+		if (assignee_zpuid) {
+			requestBody.assignee = { zpuid: assignee_zpuid };
+		}
+
+		// Add severity if provided
+		if (severity_id) {
+			requestBody.severity = { id: severity_id };
+		}
+
+		// Add classification if provided
+		if (classification_id) {
+			requestBody.classification = { id: classification_id };
+		}
+
+		// Add module if provided
+		if (module_id) {
+			requestBody.module = { id: module_id };
+		}
+
 		const data = await this.makeRequest(
 			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}`,
 			'PATCH',
-			issueData,
+			requestBody,
 		);
 		return {
 			content: [
 				{
 					type: 'text',
 					text: `Issue updated successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async deleteIssue(projectId: string, issueId: string) {
+		await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Issue deleted successfully',
+				},
+			],
+		};
+	}
+
+	private async moveIssue(params: any) {
+		const { project_id, issue_id, to_project } = params;
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/move`,
+			'POST',
+			{ to_project },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Issue moved successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async cloneIssue(projectId: string, issueId: string) {
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}/clone`,
+			'POST',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Issue cloned successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async getIssueActivities(params: any) {
+		const { project_id, issue_id, page = 1, per_page = 10 } = params;
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/activities?page=${page}&per_page=${per_page}`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	// Issue Comments operations
+	private async getIssueComments(params: any) {
+		const { project_id, issue_id, page = 1, per_page = 10 } = params;
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments?page=${page}&per_page=${per_page}`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async addIssueComment(params: any) {
+		const { project_id, issue_id, comment, notify_users, attachment_ids } = params;
+
+		const requestBody: any = { comment };
+		if (notify_users) requestBody.notify_users = notify_users;
+		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments`,
+			'POST',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Comment added successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async updateIssueComment(params: any) {
+		const { project_id, issue_id, comment_id, comment, notify_users, attachment_ids } = params;
+
+		const requestBody: any = { comment };
+		if (notify_users) requestBody.notify_users = notify_users;
+		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments/${comment_id}`,
+			'PATCH',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Comment updated successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async deleteIssueComment(projectId: string, issueId: string, commentId: string) {
+		await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}/comments/${commentId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Comment deleted successfully',
 				},
 			],
 		};
