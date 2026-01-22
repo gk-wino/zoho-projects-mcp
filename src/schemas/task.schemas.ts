@@ -36,7 +36,7 @@ export const taskSchemas = {
 	create_task: {
 		name: 'create_task',
 		description:
-			'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists.',
+			'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists. To create a subtask, provide parent_task_id.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -48,6 +48,11 @@ export const taskSchemas = {
 					type: 'string',
 					description:
 						'Task list ID (optional - uses general/default task list if not provided. Get from list_tasklists)',
+				},
+				parent_task_id: {
+					type: 'string',
+					description:
+						'Parent task ID (optional - provide this to create a subtask under an existing task. Get from list_tasks or get_task)',
 				},
 				name: { type: 'string', description: 'Task name (required)' },
 				description: {
@@ -105,6 +110,30 @@ export const taskSchemas = {
 				task_id: { type: 'string', description: 'Task ID' },
 			},
 			required: ['project_id', 'task_id'],
+		},
+	},
+	clone_task: {
+		name: 'clone_task',
+		description:
+			'Clone a task to create multiple instances within the same project. Each cloned instance will have the same properties as the original task.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				project_id: {
+					type: 'string',
+					description: 'Project ID (obtain from list_projects)',
+				},
+				task_id: {
+					type: 'string',
+					description: 'Task ID to clone (obtain from list_tasks or get_task)',
+				},
+				no_of_instances: {
+					type: 'number',
+					description: 'Number of task instances to create (must be at least 1)',
+					default: 1,
+				},
+			},
+			required: ['project_id', 'task_id', 'no_of_instances'],
 		},
 	},
 	move_task: {

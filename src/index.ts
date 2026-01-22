@@ -120,6 +120,8 @@ class ZohoProjectsServer {
 						return await this.handlers.tasks.updateTask(params);
 					case 'delete_task':
 						return await this.handlers.tasks.deleteTask(params.project_id, params.task_id);
+					case 'clone_task':
+						return await this.handlers.tasks.cloneTask(params);
 					case 'move_task':
 						return await this.handlers.tasks.moveTask(params);
 					case 'get_associated_bugs':

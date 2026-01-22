@@ -23,7 +23,7 @@ export class TaskHandler {
 	}
 
 	async createTask(params: any) {
-		const { project_id, tasklist_id, assignee_zpuid, ...taskData } = params;
+		const { project_id, tasklist_id, parent_task_id, assignee_zpuid, ...taskData } = params;
 
 		// Build task data according to API spec
 		const requestBody: any = {
@@ -33,6 +33,11 @@ export class TaskHandler {
 		// Add tasklist if provided, otherwise API will use general tasklist
 		if (tasklist_id) {
 			requestBody.tasklist = { id: tasklist_id };
+		}
+
+		// Add parental_info if parent_task_id is provided (for creating subtasks)
+		if (parent_task_id) {
+			requestBody.parental_info = { parent_task_id: parent_task_id };
 		}
 
 		// Add owners_and_work if assignee is provided
@@ -99,6 +104,26 @@ export class TaskHandler {
 				{
 					type: 'text',
 					text: `Task deleted successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	async cloneTask(params: any) {
+		const { project_id, task_id, no_of_instances } = params;
+
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/tasks/${task_id}/clone`,
+			'POST',
+			{ no_of_instances: no_of_instances },
+			false,
+			'application/x-www-form-urlencoded',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Task cloned successfully (${no_of_instances} instance(s)):\n${JSON.stringify(data, null, 2)}`,
 				},
 			],
 		};

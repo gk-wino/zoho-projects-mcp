@@ -359,6 +359,172 @@ Phase Created:
 ============================================================
 ```
 
+## Task Smoke Tests
+
+Tests in `task.test.ts`:
+
+### 1. List Tasks (`list_tasks`)
+
+- Calls the `list_tasks` tool for a specific project
+- Validates response contains tasks array
+- Logs count of tasks found
+- Displays first task details if available
+
+### 2. Create Task (`create_task`)
+
+- Creates a new test task with:
+  - Unique timestamped name
+  - Description for testing
+  - High priority
+- Validates task creation response
+- Stores task ID for subsequent tests
+- Logs created task details (name, ID, priority)
+
+### 3. Create Subtask (`create_task` with parent_task_id) ⭐
+
+- **Creates a subtask under an existing parent task**
+- Uses `parent_task_id` parameter to establish parent-child relationship
+- Validates subtask creation with:
+  - Unique timestamped name
+  - Description specific to subtask
+  - Medium priority
+- **Confirms subtask depth is greater than 0**
+- This demonstrates the new subtask creation feature
+- Logs subtask details including parent task ID and depth
+
+### 4. Get Task (`get_task`)
+
+- Retrieves detailed information about the created task
+- Validates task ID and name
+- Logs comprehensive task information:
+  - Name and ID
+  - Status (Open/Closed)
+  - Priority level
+  - Depth (0 for main task, >0 for subtask)
+
+### 5. Update Task (`update_task`)
+
+- Updates the test task:
+  - Changes name to timestamped variant
+  - Changes priority from high to low
+  - Updates description
+- Validates response structure
+- Logs updated task details
+
+### 6. Clone Task (`clone_task`) ⭐
+
+- **Clones the task to create 2 duplicate instances**
+- Validates successful cloning operation
+- Waits for clones to appear in the system
+- Lists tasks to find cloned instances
+- Stores cloned task IDs for cleanup
+- This demonstrates the new task cloning feature
+- Logs number of clones created
+
+### 7. Add Task Comment (`add_task_comment`)
+
+- Adds a test comment to the task
+- Validates comment creation
+- Stores comment ID for reference
+- Logs comment details
+
+### 8. List Task Comments (`list_task_comments`)
+
+- Retrieves all comments on the task
+- Validates response structure
+- Logs comment count
+
+### 9. Move Task (`move_task`)
+
+- Creates a new task list as the target
+- Moves the task to the new task list
+- Validates successful move operation
+- Logs move confirmation with target task list name
+
+### 10. Delete Task (`delete_task`)
+
+- Deletes test tasks (main task, subtask, cloned tasks)
+- Validates successful deletion
+- Performs cleanup of test data
+- Logs deletion confirmation
+
+### Run Task Tests
+
+```bash
+npm run test:smoke:task
+```
+
+### Expected Output
+
+```
+🚀 Starting Task Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+✅ Using cached test project: Zoho Project MCP Tests
+
+🔧 Ensuring default tasklist exists...
+✅ Created default tasklist
+
+🧹 Cleaning up orphaned test tasks...
+✅ No orphaned test tasks found
+
+============================================================
+🧪 TEST: list_tasks
+============================================================
+Found 0 tasks
+✅ PASSED: list_tasks
+
+============================================================
+🧪 TEST: create_task
+============================================================
+Created task: Test Task 1769120019794 (ID: 1817452000005352261)
+Priority: high
+✅ PASSED: create_task
+
+============================================================
+🧪 TEST: create_task (subtask)
+============================================================
+✅ Created SUBTASK: Test Subtask 1769120020734 (ID: 1817452000005354163)
+Parent Task ID: 1817452000005352261
+Depth: 1
+✓ Confirmed as subtask (depth: 1)
+✅ PASSED: create_task (subtask)
+
+============================================================
+🧪 TEST: get_task
+============================================================
+Task: Test Task 1769120019794
+Status: Open
+Priority: high
+Depth: 0 (main task)
+✅ PASSED: get_task
+
+============================================================
+🧪 TEST: update_task
+============================================================
+Updated task: Updated Task 1769120022589
+New priority: low
+✅ PASSED: update_task
+
+============================================================
+🧪 TEST: clone_task
+============================================================
+✅ Cloned task successfully
+Number of clones: 2
+Found 3 tasks with similar names (including original)
+✅ PASSED: clone_task
+
+... (remaining test outputs)
+
+============================================================
+✨ All Task Smoke Tests Passed!
+============================================================
+
+✅ Subtask creation feature verified successfully!
+✅ Task cloning feature verified successfully!
+```
+
 ## TaskList Smoke Tests
 
 Tests in `tasklist.test.ts`:
