@@ -134,17 +134,27 @@ async function runPortalSmokeTests() {
 		console.log(`   Passed: 2`);
 		console.log(`   Failed: 0`);
 		console.log(`   Portal Validated: ${env.portalId}`);
+
+		// Cleanup
+		if (client) {
+			await cleanup(client);
+		}
+
+		// Exit successfully
+		process.exit(0);
 	} catch (error) {
 		console.error('\n' + '='.repeat(60));
 		console.error('💥 Smoke Tests Failed');
 		console.error('='.repeat(60));
 		console.error('\nError:', error);
-		process.exit(1);
-	} finally {
+
 		// Cleanup
 		if (client) {
 			await cleanup(client);
 		}
+
+		// Exit with error
+		process.exit(1);
 	}
 }
 

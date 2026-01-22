@@ -8,6 +8,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Store server process for cleanup
+let serverProcess: any = null;
+
 // Load environment variables from .env file
 export function loadEnv() {
 	const envPath = path.resolve(__dirname, '../../.env');
@@ -46,18 +49,15 @@ export function loadEnv() {
 export async function createMcpClient(): Promise<Client> {
 	const serverPath = path.resolve(__dirname, '../../dist/index.js');
 
-	// Spawn the MCP server process
-	const serverProcess = spawn('node', [serverPath], {
-		stdio: ['pipe', 'pipe', 'inherit'],
-		env: process.env,
-	});
-
-	// Create stdio transport
+	// Create stdio transport (this will spawn the server process)
 	const transport = new StdioClientTransport({
 		command: 'node',
 		args: [serverPath],
 		env: process.env,
 	});
+
+	// Store reference to the underlying process for cleanup
+	serverProcess = (transport as any).process;
 
 	// Create MCP client
 	const client = new Client(
@@ -137,8 +137,24 @@ export function wait(ms: number): Promise<void> {
 // Graceful cleanup
 export async function cleanup(client: Client) {
 	try {
+		console.log('\n🧹 Cleaning up...');
+
+		// Close the client connection
 		await client.close();
-		console.log('\n✨ Cleanup completed');
+
+		// Kill the server process if it exists
+		if (serverProcess && !serverProcess.killed) {
+			serverProcess.kill('SIGTERM');
+
+			// Force kill if it doesn't exit in 2 seconds
+			setTimeout(() => {
+				if (!serverProcess.killed) {
+					serverProcess.kill('SIGKILL');
+				}
+			}, 2000);
+		}
+
+		console.log('✨ Cleanup completed');
 	} catch (error) {
 		console.error('Error during cleanup:', error);
 	}
