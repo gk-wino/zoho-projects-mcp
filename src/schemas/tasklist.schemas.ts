@@ -138,7 +138,8 @@ export const tasklistSchemas = {
 				tasklist_id: { type: 'string', description: 'Task List ID' },
 				comment: {
 					type: 'string',
-					description: 'Comment text (max 500,000 characters)',
+					description:
+						'Comment text (max 500,000 characters). Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				attachment_ids: {
 					type: 'array',
@@ -160,7 +161,8 @@ export const tasklistSchemas = {
 				comment_id: { type: 'string', description: 'Comment ID' },
 				comment: {
 					type: 'string',
-					description: 'Updated comment text (max 500,000 characters)',
+					description:
+						'Updated comment text (max 500,000 characters). Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				attachment_ids: {
 					type: 'array',

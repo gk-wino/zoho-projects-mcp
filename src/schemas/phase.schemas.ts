@@ -378,7 +378,8 @@ export const phaseSchemas = {
 				},
 				content: {
 					type: 'string',
-					description: 'Comment content',
+					description:
+						'Comment content. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				notify: {
 					type: 'array',
@@ -415,7 +416,8 @@ export const phaseSchemas = {
 				},
 				content: {
 					type: 'string',
-					description: 'Updated comment content',
+					description:
+						'Updated comment content. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				notify: {
 					type: 'array',

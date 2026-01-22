@@ -57,7 +57,8 @@ export const taskSchemas = {
 				name: { type: 'string', description: 'Task name (required)' },
 				description: {
 					type: 'string',
-					description: 'Task description (optional)',
+					description:
+						'Task description (optional). Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				...priorityProperty,
 				...isoDateProperties,
@@ -92,7 +93,8 @@ export const taskSchemas = {
 				},
 				description: {
 					type: 'string',
-					description: 'Task description (optional - only if updating)',
+					description:
+						'Task description (optional - only if updating). Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				...priorityProperty,
 				...isoDateProperties,
@@ -274,7 +276,8 @@ export const taskSchemas = {
 				},
 				comment: {
 					type: 'string',
-					description: 'The comment text/content to add',
+					description:
+						'The comment text/content to add. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				attachments: {
 					type: 'array',
@@ -305,7 +308,8 @@ export const taskSchemas = {
 				},
 				comment: {
 					type: 'string',
-					description: 'The updated comment text/content',
+					description:
+						'The updated comment text/content. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
 				},
 				attachments: {
 					type: 'array',
