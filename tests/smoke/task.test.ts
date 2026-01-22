@@ -17,6 +17,8 @@ import {
 // Store IDs for cleanup
 let createdTaskId: string | null = null;
 let createdSubtaskId: string | null = null;
+let createdSubtask2LevelId: string | null = null;
+let createdSubtask3LevelId: string | null = null;
 let clonedTaskIds: string[] = [];
 let createdTaskListId: string | null = null;
 let createdCommentId: string | null = null;
@@ -46,6 +48,8 @@ async function cleanupOrphanedTasks(client: Client, projectId: string) {
 			/^Test Task \d+$/,
 			/^Updated Task \d+$/,
 			/^Test Subtask \d+$/,
+			/^Test Subtask 2-Level \d+$/,
+			/^Test Subtask 3-Level \d+$/,
 			/^Clone of Test Task \d+$/,
 		];
 		const orphanedTasks = data.tasks.filter((task: any) =>
@@ -184,6 +188,102 @@ async function testCreateSubtask(client: Client, projectId: string, parentTaskId
 		// Verify it's actually a subtask by checking depth or parental_info
 		if (data.depth !== undefined && data.depth > 0) {
 			console.log(`✓ Confirmed as subtask (depth: ${data.depth})`);
+		}
+
+		logTestSuccess(testName);
+		return data;
+	} catch (error) {
+		logTestFailure(testName, error);
+		throw error;
+	}
+}
+
+async function testCreateSubtask2Level(client: Client, projectId: string, parentTaskId: string) {
+	const testName = 'create_task (2-level subtask)';
+	logTestStart(testName);
+
+	try {
+		const subtaskName = `Test Subtask 2-Level ${Date.now()}`;
+		const response = await callTool(client, 'create_task', {
+			project_id: projectId,
+			parent_task_id: parentTaskId,
+			name: subtaskName,
+			description: 'This is a 2-level deep subtask (subtask of a subtask)',
+			priority: 'low',
+		});
+		let data = parseToolResponse(response);
+
+		// Handle wrapped response (JSON inside success message string)
+		if (typeof data === 'string') {
+			const jsonMatch = data.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				data = JSON.parse(jsonMatch[0]);
+			}
+		}
+
+		if (!data.id) {
+			console.error('Response data:', JSON.stringify(data, null, 2));
+			throw new Error('Expected 2-level subtask ID in response');
+		}
+
+		createdSubtask2LevelId = data.id;
+		console.log(`\n✅ Created 2-LEVEL SUBTASK: ${data.name} (ID: ${data.id})`);
+		console.log(`Parent Subtask ID: ${parentTaskId}`);
+		console.log(`Depth: ${data.depth || 'N/A'}`);
+
+		// Verify it's at depth 2
+		if (data.depth !== undefined && data.depth === 2) {
+			console.log(`✓ Confirmed as 2-level subtask (depth: ${data.depth})`);
+		} else {
+			console.warn(`⚠️  Expected depth 2, got: ${data.depth}`);
+		}
+
+		logTestSuccess(testName);
+		return data;
+	} catch (error) {
+		logTestFailure(testName, error);
+		throw error;
+	}
+}
+
+async function testCreateSubtask3Level(client: Client, projectId: string, parentTaskId: string) {
+	const testName = 'create_task (3-level subtask)';
+	logTestStart(testName);
+
+	try {
+		const subtaskName = `Test Subtask 3-Level ${Date.now()}`;
+		const response = await callTool(client, 'create_task', {
+			project_id: projectId,
+			parent_task_id: parentTaskId,
+			name: subtaskName,
+			description: 'This is a 3-level deep subtask (subtask of a subtask of a subtask)',
+			priority: 'none',
+		});
+		let data = parseToolResponse(response);
+
+		// Handle wrapped response (JSON inside success message string)
+		if (typeof data === 'string') {
+			const jsonMatch = data.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				data = JSON.parse(jsonMatch[0]);
+			}
+		}
+
+		if (!data.id) {
+			console.error('Response data:', JSON.stringify(data, null, 2));
+			throw new Error('Expected 3-level subtask ID in response');
+		}
+
+		createdSubtask3LevelId = data.id;
+		console.log(`\n✅ Created 3-LEVEL SUBTASK: ${data.name} (ID: ${data.id})`);
+		console.log(`Parent 2-Level Subtask ID: ${parentTaskId}`);
+		console.log(`Depth: ${data.depth || 'N/A'}`);
+
+		// Verify it's at depth 3
+		if (data.depth !== undefined && data.depth === 3) {
+			console.log(`✓ Confirmed as 3-level subtask (depth: ${data.depth})`);
+		} else {
+			console.warn(`⚠️  Expected depth 3, got: ${data.depth}`);
 		}
 
 		logTestSuccess(testName);
@@ -500,6 +600,18 @@ async function runTaskSmokeTests() {
 			await wait(500);
 		}
 
+		// Test 3a: Create a 2-level subtask (subtask of a subtask)
+		if (createdSubtaskId) {
+			await testCreateSubtask2Level(client, testProject.projectId, createdSubtaskId);
+			await wait(500);
+		}
+
+		// Test 3b: Create a 3-level subtask (subtask of a subtask of a subtask)
+		if (createdSubtask2LevelId) {
+			await testCreateSubtask3Level(client, testProject.projectId, createdSubtask2LevelId);
+			await wait(500);
+		}
+
 		// Test 4: Get task details
 		if (createdTaskId) {
 			await testGetTask(client, testProject.projectId, createdTaskId);
@@ -536,8 +648,26 @@ async function runTaskSmokeTests() {
 			await wait(500);
 		}
 
-		// Cleanup: Delete created tasks
+		// Cleanup: Delete created tasks (in reverse order of creation)
 		console.log('\n🧹 Cleaning up created test data...');
+
+		if (createdSubtask3LevelId) {
+			try {
+				await testDeleteTask(client, testProject.projectId, createdSubtask3LevelId);
+				await wait(300);
+			} catch (error) {
+				console.warn(`Failed to delete 3-level subtask: ${error}`);
+			}
+		}
+
+		if (createdSubtask2LevelId) {
+			try {
+				await testDeleteTask(client, testProject.projectId, createdSubtask2LevelId);
+				await wait(300);
+			} catch (error) {
+				console.warn(`Failed to delete 2-level subtask: ${error}`);
+			}
+		}
 
 		if (createdSubtaskId) {
 			try {
@@ -592,6 +722,8 @@ async function runTaskSmokeTests() {
 		console.log('✨ All Task Smoke Tests Passed!');
 		console.log('='.repeat(60));
 		console.log('\n✅ Subtask creation feature verified successfully!');
+		console.log('✅ 2-level subtask creation verified successfully!');
+		console.log('✅ 3-level subtask creation verified successfully!');
 		console.log('✅ Task cloning feature verified successfully!');
 
 		await cleanup(client);
