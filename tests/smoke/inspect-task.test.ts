@@ -108,7 +108,7 @@ async function runInspectTask() {
 					console.log('\n' + '='.repeat(80));
 					console.log('EXTRACTED CODE BLOCKS');
 					console.log('='.repeat(80));
-					codeBlockMatches.forEach((block, index) => {
+					codeBlockMatches.forEach((block: string, index: number) => {
 						console.log(`\n--- Code Block ${index + 1} ---`);
 						console.log(block);
 					});
