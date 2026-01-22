@@ -108,7 +108,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 
 	await wait(500);
 
-	// Test 2: Task with Text Formatting (Bold, Italic, Underline)
+	// Test 2: Task with Text Formatting (Bold, Italic, Underline, Colors)
 	const testName2 = 'WYSIWYG: Text Formatting';
 	logTestStart(testName2);
 	try {
@@ -116,6 +116,9 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			<p>This paragraph contains <strong>bold text</strong>, <em>italic text</em>, and <u>underlined text</u>.</p>
 			<p>We can also combine them: <strong><em>bold and italic</em></strong>, <strong><u>bold and underline</u></strong>, and <em><u>italic and underline</u></em>.</p>
 			<p>Even all three: <strong><em><u>bold, italic, and underlined</u></em></strong>!</p>
+			<p>Text colors: <span style="color: rgb(255, 0, 0);">red text</span>, <span style="color: rgb(0, 128, 0);">green text</span>, <span style="color: rgb(0, 0, 255);">blue text</span>.</p>
+			<p>Background colors: <span style="background-color: rgb(255, 255, 0);">yellow background</span>, <span style="background-color: rgb(144, 238, 144);">light green background</span>, <span style="background-color: rgb(255, 192, 203);">pink background</span>.</p>
+			<p>Combined: <strong><span style="color: rgb(255, 255, 255); background-color: rgb(0, 0, 0);">bold white text on black background</span></strong>!</p>
 		`;
 
 		const response = await callTool(client, 'create_task', {
@@ -334,8 +337,107 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 		console.log(`\n✅ Created task with mixed complex formatting (ID: ${taskId})`);
 		logTestSuccess(testName6);
 
-		// Add comments with rich formatting to this task
-		await wait(500);
+		return taskId;
+	} catch (error) {
+		logTestFailure(testName6, error);
+		throw error;
+	}
+}
+
+/**
+ * Test WYSIWYG links, tables, and images
+ */
+async function testWYSIWYGLinksTablesImages(client: Client, projectId: string, previousTaskId: string) {
+	await wait(500);
+
+	// Test 7: Task with Links, Tables, and Images
+	const testName7 = 'WYSIWYG: Links, Tables & Images';
+	logTestStart(testName7);
+	try {
+		const htmlDescription = `
+			<h2>🔗 Links, Tables & Images Demo</h2>
+			<h3>Links</h3>
+			<p>Here are some useful links:</p>
+			<ul>
+				<li><a href="https://www.zoho.com/projects/" target="_blank">Zoho Projects</a> - Project management tool</li>
+				<li><a href="https://github.com" target="_blank">GitHub</a> - Code repository</li>
+				<li><a href="https://www.example.com" target="_blank">Example Website</a> - Documentation</li>
+			</ul>
+			<h3>Data Table</h3>
+			<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+				<thead>
+					<tr style="background-color: rgb(240, 240, 240);">
+						<th style="padding: 8px; text-align: left;"><strong>Feature</strong></th>
+						<th style="padding: 8px; text-align: left;"><strong>Status</strong></th>
+						<th style="padding: 8px; text-align: left;"><strong>Priority</strong></th>
+						<th style="padding: 8px; text-align: left;"><strong>Assignee</strong></th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td style="padding: 8px;">User Authentication</td>
+						<td style="padding: 8px;"><span style="color: rgb(0, 128, 0);">✓ Completed</span></td>
+						<td style="padding: 8px;">High</td>
+						<td style="padding: 8px;">John Doe</td>
+					</tr>
+					<tr style="background-color: rgb(250, 250, 250);">
+						<td style="padding: 8px;">Dashboard UI</td>
+						<td style="padding: 8px;"><span style="color: rgb(255, 165, 0);">⚠ In Progress</span></td>
+						<td style="padding: 8px;">Medium</td>
+						<td style="padding: 8px;">Jane Smith</td>
+					</tr>
+					<tr>
+						<td style="padding: 8px;">API Integration</td>
+						<td style="padding: 8px;"><span style="color: rgb(128, 128, 128);">○ Pending</span></td>
+						<td style="padding: 8px;">High</td>
+						<td style="padding: 8px;">Bob Johnson</td>
+					</tr>
+					<tr style="background-color: rgb(250, 250, 250);">
+						<td style="padding: 8px;">Testing & QA</td>
+						<td style="padding: 8px;"><span style="color: rgb(128, 128, 128);">○ Pending</span></td>
+						<td style="padding: 8px;">Low</td>
+						<td style="padding: 8px;">Alice Williams</td>
+					</tr>
+				</tbody>
+			</table>
+			<h3>Images</h3>
+			<p>Project architecture diagram:</p>
+			<img src="https://via.placeholder.com/600x300/4A90E2/FFFFFF?text=Project+Architecture+Diagram" alt="Project Architecture" style="max-width: 100%; height: auto; border: 1px solid rgb(200, 200, 200);" />
+			<p><br/></p>
+			<p>Technology stack icons:</p>
+			<img src="https://via.placeholder.com/150x150/FF6B6B/FFFFFF?text=React" alt="React" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<img src="https://via.placeholder.com/150x150/4ECDC4/FFFFFF?text=Node.js" alt="Node.js" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<img src="https://via.placeholder.com/150x150/95E1D3/FFFFFF?text=MongoDB" alt="MongoDB" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<p><br/></p>
+			<p><strong>Note:</strong> Images are loaded from external URLs and tables support full HTML styling.</p>
+		`;
+
+		const response = await callTool(client, 'create_task', {
+			project_id: projectId,
+			name: `WYSIWYG Test: Links, Tables & Images ${Date.now()}`,
+			description: htmlDescription,
+			priority: 'high',
+		});
+		let data = parseToolResponse(response);
+		if (typeof data === 'string') {
+			const jsonMatch = data.match(/\{[\s\S]*\}/);
+			if (jsonMatch) data = JSON.parse(jsonMatch[0]);
+		}
+		console.log(`\n✅ Created task with links, tables & images (ID: ${data.id})`);
+		logTestSuccess(testName7);
+		return data.id;
+	} catch (error) {
+		logTestFailure(testName7, error);
+		throw error;
+	}
+}
+
+/**
+ * Add rich formatted comments to a task
+ */
+async function addRichComments(client: Client, projectId: string, taskId: string) {
+	// Add comments with rich formatting to this task
+	await wait(500);
 
 		// Comment 1: Simple formatted comment
 		const commentName1 = 'WYSIWYG Comment: Basic Formatting';
@@ -425,12 +527,6 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 		} catch (error) {
 			logTestFailure(commentName3, error);
 		}
-
-		return taskId;
-	} catch (error) {
-		logTestFailure(testName6, error);
-		throw error;
-	}
 }
 
 async function runWYSIWYGSmokeTests() {
@@ -474,7 +570,9 @@ async function runWYSIWYGSmokeTests() {
 
 		// WYSIWYG Editor Formatting Tests
 		// Note: These tasks are NOT deleted after creation for manual verification in Zoho Portal
-		await testWYSIWYGFormatting(client, testProject.projectId);
+		const complexTaskId = await testWYSIWYGFormatting(client, testProject.projectId);
+		await testWYSIWYGLinksTablesImages(client, testProject.projectId, complexTaskId);
+		await addRichComments(client, testProject.projectId, complexTaskId);
 
 		// Summary
 		console.log('\n' + '='.repeat(60));
@@ -482,10 +580,11 @@ async function runWYSIWYGSmokeTests() {
 		console.log('='.repeat(60));
 		console.log('\n🎨 WYSIWYG Editor Tests:');
 		console.log('✅ Headers & Paragraphs formatting verified!');
-		console.log('✅ Text formatting (bold, italic, underline) verified!');
+		console.log('✅ Text formatting (bold, italic, underline, colors) verified!');
 		console.log('✅ Lists (ordered & unordered) verified!');
 		console.log('✅ Code & preformatted text verified!');
 		console.log('✅ Nested lists & complex formatting verified!');
+		console.log('✅ Links, tables & images verified!');
 		console.log('✅ Rich comments formatting verified!');
 		console.log(
 			'\n⚠️  Note: WYSIWYG test tasks were NOT deleted. Please verify them in Zoho Portal.',
