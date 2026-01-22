@@ -24,10 +24,10 @@ let createdTaskListId: string | null = null;
 let createdCommentId: string | null = null;
 
 /**
- * Cleanup orphaned test tasks from previous failed runs
+ * Cleanup orphaned test tasks and task lists from previous failed runs
  */
 async function cleanupOrphanedTasks(client: Client, projectId: string) {
-	console.log('\n🧹 Cleaning up orphaned test tasks...');
+	console.log('\n🧹 Cleaning up orphaned test tasks and task lists...');
 
 	try {
 		// Get all tasks from the project
@@ -40,40 +40,76 @@ async function cleanupOrphanedTasks(client: Client, projectId: string) {
 
 		if (!data.tasks || !Array.isArray(data.tasks)) {
 			console.log('No tasks found or unable to parse response');
-			return;
+		} else {
+			// Filter orphaned test tasks (matching test patterns)
+			const testPatterns = [
+				/^Test Task \d+$/,
+				/^Updated Task \d+$/,
+				/^Test Subtask \d+$/,
+				/^Test Subtask 2-Level \d+$/,
+				/^Test Subtask 3-Level \d+$/,
+				/^Clone of Test Task \d+$/,
+			];
+			const orphanedTasks = data.tasks.filter((task: any) =>
+				testPatterns.some((pattern) => pattern.test(task.name)),
+			);
+
+			if (orphanedTasks.length === 0) {
+				console.log('✅ No orphaned test tasks found');
+			} else {
+				console.log(`Found ${orphanedTasks.length} orphaned test task(s)`);
+
+				// Delete each orphaned task
+				for (const task of orphanedTasks) {
+					try {
+						await callTool(client, 'delete_task', {
+							project_id: projectId,
+							task_id: task.id,
+						});
+						console.log(`   Deleted task: ${task.name} (ID: ${task.id})`);
+						await wait(300); // Small delay between deletions
+					} catch (error: any) {
+						console.warn(`   Failed to delete ${task.name}: ${error.message}`);
+					}
+				}
+			}
 		}
 
-		// Filter orphaned test tasks (matching test patterns)
-		const testPatterns = [
-			/^Test Task \d+$/,
-			/^Updated Task \d+$/,
-			/^Test Subtask \d+$/,
-			/^Test Subtask 2-Level \d+$/,
-			/^Test Subtask 3-Level \d+$/,
-			/^Clone of Test Task \d+$/,
-		];
-		const orphanedTasks = data.tasks.filter((task: any) =>
-			testPatterns.some((pattern) => pattern.test(task.name)),
-		);
+		// Get all task lists from the project
+		const taskListResponse = await callTool(client, 'list_tasklists', {
+			project_id: projectId,
+			page: 1,
+			per_page: 100,
+		});
+		const taskListData = parseToolResponse(taskListResponse);
 
-		if (orphanedTasks.length === 0) {
-			console.log('✅ No orphaned test tasks found');
-			return;
-		}
+		if (!taskListData.tasklists || !Array.isArray(taskListData.tasklists)) {
+			console.log('No task lists found or unable to parse response');
+		} else {
+			// Filter orphaned test task lists (matching test patterns)
+			const taskListPattern = /^Test TaskList for Move \d+$/;
+			const orphanedTaskLists = taskListData.tasklists.filter((taskList: any) =>
+				taskListPattern.test(taskList.name),
+			);
 
-		console.log(`Found ${orphanedTasks.length} orphaned test task(s)`);
+			if (orphanedTaskLists.length === 0) {
+				console.log('✅ No orphaned test task lists found');
+			} else {
+				console.log(`Found ${orphanedTaskLists.length} orphaned test task list(s)`);
 
-		// Delete each orphaned task
-		for (const task of orphanedTasks) {
-			try {
-				await callTool(client, 'delete_task', {
-					project_id: projectId,
-					task_id: task.id,
-				});
-				console.log(`   Deleted: ${task.name} (ID: ${task.id})`);
-				await wait(300); // Small delay between deletions
-			} catch (error: any) {
-				console.warn(`   Failed to delete ${task.name}: ${error.message}`);
+				// Delete each orphaned task list
+				for (const taskList of orphanedTaskLists) {
+					try {
+						await callTool(client, 'delete_tasklist', {
+							project_id: projectId,
+							tasklist_id: taskList.id,
+						});
+						console.log(`   Deleted task list: ${taskList.name} (ID: ${taskList.id})`);
+						await wait(300); // Small delay between deletions
+					} catch (error: any) {
+						console.warn(`   Failed to delete ${taskList.name}: ${error.message}`);
+					}
+				}
 			}
 		}
 
