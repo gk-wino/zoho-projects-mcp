@@ -82,8 +82,10 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 		const htmlDescription = `
 			<h1>Main Project Header</h1>
 			<p>This is a regular paragraph with important information about the task.</p>
+			<p><br/></p>
 			<h2>Subheading for Details</h2>
 			<p>Another paragraph with more details. This tests multiple paragraph support.</p>
+			<p><br/></p>
 			<h3>Smaller Heading</h3>
 			<p>Final paragraph in this section.</p>
 		`;
@@ -116,8 +118,11 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			<p>This paragraph contains <strong>bold text</strong>, <em>italic text</em>, and <u>underlined text</u>.</p>
 			<p>We can also combine them: <strong><em>bold and italic</em></strong>, <strong><u>bold and underline</u></strong>, and <em><u>italic and underline</u></em>.</p>
 			<p>Even all three: <strong><em><u>bold, italic, and underlined</u></em></strong>!</p>
+			<p><br/></p>
 			<p>Text colors: <span style="color: rgb(255, 0, 0);">red text</span>, <span style="color: rgb(0, 128, 0);">green text</span>, <span style="color: rgb(0, 0, 255);">blue text</span>.</p>
+			<p><br/></p>
 			<p>Background colors: <span style="background-color: rgb(255, 255, 0);">yellow background</span>, <span style="background-color: rgb(144, 238, 144);">light green background</span>, <span style="background-color: rgb(255, 192, 203);">pink background</span>.</p>
+			<p><br/></p>
 			<p>Combined: <strong><span style="color: rgb(255, 255, 255); background-color: rgb(0, 0, 0);">bold white text on black background</span></strong>!</p>
 		`;
 
@@ -153,6 +158,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 				<li>Third item with <em>italic text</em></li>
 				<li>Fourth item</li>
 			</ul>
+			<p><br/></p>
 			<h3>Ordered List (Numbered)</h3>
 			<ol>
 				<li>First step in the process</li>
@@ -202,6 +208,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">}<br/></li>
 			</ul>
 			<div><br/></div>
+			<p><br/></p>
 			<p>Preformatted text:</p>
 			<pre>This text preserves
     spaces and
@@ -283,6 +290,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 		const htmlDescription = `
 			<h2>🎯 Complete Feature Implementation</h2>
 			<p><strong>Priority:</strong> <em>High</em> | <strong>Status:</strong> <u>In Progress</u></p>
+			<p><br/></p>
 			<h3>Requirements</h3>
 			<ol>
 				<li><strong>Backend API</strong>
@@ -300,6 +308,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 				</li>
 				<li><em>Testing & Documentation</em></li>
 			</ol>
+			<p><br/></p>
 			<h3>Code Example</h3>
 			<div>
 				<p><br/></p>
@@ -318,6 +327,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 				<li style="border-left:2px solid rgb(204, 204, 204); padding:2px; margin:1px 0; background-color:rgb(245, 245, 245)">};<br/></li>
 			</ul>
 			<div><br/></div>
+			<p><br/></p>
 			<p><strong>Note:</strong> Make sure to test all edge cases before deployment.</p>
 		`;
 
@@ -347,7 +357,11 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 /**
  * Test WYSIWYG links, tables, and images
  */
-async function testWYSIWYGLinksTablesImages(client: Client, projectId: string, previousTaskId: string) {
+async function testWYSIWYGLinksTablesImages(
+	client: Client,
+	projectId: string,
+	previousTaskId: string,
+) {
 	await wait(500);
 
 	// Test 7: Task with Links, Tables, and Images
@@ -356,6 +370,7 @@ async function testWYSIWYGLinksTablesImages(client: Client, projectId: string, p
 	try {
 		const htmlDescription = `
 			<h2>🔗 Links, Tables & Images Demo</h2>
+			<p><br/></p>
 			<h3>Links</h3>
 			<p>Here are some useful links:</p>
 			<ul>
@@ -363,6 +378,7 @@ async function testWYSIWYGLinksTablesImages(client: Client, projectId: string, p
 				<li><a href="https://github.com" target="_blank">GitHub</a> - Code repository</li>
 				<li><a href="https://www.example.com" target="_blank">Example Website</a> - Documentation</li>
 			</ul>
+			<p><br/></p>
 			<h3>Data Table</h3>
 			<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
 				<thead>
@@ -400,16 +416,17 @@ async function testWYSIWYGLinksTablesImages(client: Client, projectId: string, p
 					</tr>
 				</tbody>
 			</table>
+			<p><br/></p>
 			<h3>Images</h3>
 			<p>Project architecture diagram:</p>
-			<img src="https://via.placeholder.com/600x300/4A90E2/FFFFFF?text=Project+Architecture+Diagram" alt="Project Architecture" style="max-width: 100%; height: auto; border: 1px solid rgb(200, 200, 200);" />
+			<img src="https://picsum.photos/id/0/600/300" alt="Project Architecture" style="max-width: 100%; height: auto; border: 1px solid rgb(200, 200, 200);" />
 			<p><br/></p>
 			<p>Technology stack icons:</p>
-			<img src="https://via.placeholder.com/150x150/FF6B6B/FFFFFF?text=React" alt="React" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
-			<img src="https://via.placeholder.com/150x150/4ECDC4/FFFFFF?text=Node.js" alt="Node.js" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
-			<img src="https://via.placeholder.com/150x150/95E1D3/FFFFFF?text=MongoDB" alt="MongoDB" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<img src="https://picsum.photos/id/9/150/150" alt="Technology 1" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<img src="https://picsum.photos/id/15/150/150" alt="Technology 2" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
+			<img src="https://picsum.photos/id/20/150/150" alt="Technology 3" style="width: 150px; height: 150px; margin: 5px; border-radius: 8px;" />
 			<p><br/></p>
-			<p><strong>Note:</strong> Images are loaded from external URLs and tables support full HTML styling.</p>
+			<p><strong>Note:</strong> Images are loaded from picsum.photos and tables support full HTML styling.</p>
 		`;
 
 		const response = await callTool(client, 'create_task', {
@@ -439,11 +456,11 @@ async function addRichComments(client: Client, projectId: string, taskId: string
 	// Add comments with rich formatting to this task
 	await wait(500);
 
-		// Comment 1: Simple formatted comment
-		const commentName1 = 'WYSIWYG Comment: Basic Formatting';
-		logTestStart(commentName1);
-		try {
-			const htmlComment1 = `
+	// Comment 1: Simple formatted comment
+	const commentName1 = 'WYSIWYG Comment: Basic Formatting';
+	logTestStart(commentName1);
+	try {
+		const htmlComment1 = `
 				<p>This is a comment with <strong>bold</strong>, <em>italic</em>, and <u>underline</u>.</p>
 				<p>Important points:</p>
 				<ul>
@@ -451,24 +468,24 @@ async function addRichComments(client: Client, projectId: string, taskId: string
 					<li>Second point</li>
 				</ul>
 			`;
-			await callTool(client, 'add_task_comment', {
-				project_id: projectId,
-				task_id: taskId,
-				comment: htmlComment1,
-			});
-			console.log('\n✅ Added comment with basic formatting');
-			logTestSuccess(commentName1);
-		} catch (error) {
-			logTestFailure(commentName1, error);
-		}
+		await callTool(client, 'add_task_comment', {
+			project_id: projectId,
+			task_id: taskId,
+			comment: htmlComment1,
+		});
+		console.log('\n✅ Added comment with basic formatting');
+		logTestSuccess(commentName1);
+	} catch (error) {
+		logTestFailure(commentName1, error);
+	}
 
-		await wait(500);
+	await wait(500);
 
-		// Comment 2: Code in comment
-		const commentName2 = 'WYSIWYG Comment: Code Block';
-		logTestStart(commentName2);
-		try {
-			const htmlComment2 = `
+	// Comment 2: Code in comment
+	const commentName2 = 'WYSIWYG Comment: Code Block';
+	logTestStart(commentName2);
+	try {
+		const htmlComment2 = `
 				<p>Here's the fix for the bug:</p>
 				<div>
 					<p><br/></p>
@@ -485,24 +502,24 @@ async function addRichComments(client: Client, projectId: string, taskId: string
 				<div><br/></div>
 				<p>This should resolve the authentication issue.</p>
 			`;
-			await callTool(client, 'add_task_comment', {
-				project_id: projectId,
-				task_id: taskId,
-				comment: htmlComment2,
-			});
-			console.log('\n✅ Added comment with code block');
-			logTestSuccess(commentName2);
-		} catch (error) {
-			logTestFailure(commentName2, error);
-		}
+		await callTool(client, 'add_task_comment', {
+			project_id: projectId,
+			task_id: taskId,
+			comment: htmlComment2,
+		});
+		console.log('\n✅ Added comment with code block');
+		logTestSuccess(commentName2);
+	} catch (error) {
+		logTestFailure(commentName2, error);
+	}
 
-		await wait(500);
+	await wait(500);
 
-		// Comment 3: Complex nested content
-		const commentName3 = 'WYSIWYG Comment: Complex';
-		logTestStart(commentName3);
-		try {
-			const htmlComment3 = `
+	// Comment 3: Complex nested content
+	const commentName3 = 'WYSIWYG Comment: Complex';
+	logTestStart(commentName3);
+	try {
+		const htmlComment3 = `
 				<h4>Update Summary</h4>
 				<p><strong>Completed:</strong></p>
 				<ol>
@@ -517,16 +534,16 @@ async function addRichComments(client: Client, projectId: string, taskId: string
 				</ol>
 				<p><em>Next steps: Deploy to staging environment</em></p>
 			`;
-			await callTool(client, 'add_task_comment', {
-				project_id: projectId,
-				task_id: taskId,
-				comment: htmlComment3,
-			});
-			console.log('\n✅ Added comment with complex nested content');
-			logTestSuccess(commentName3);
-		} catch (error) {
-			logTestFailure(commentName3, error);
-		}
+		await callTool(client, 'add_task_comment', {
+			project_id: projectId,
+			task_id: taskId,
+			comment: htmlComment3,
+		});
+		console.log('\n✅ Added comment with complex nested content');
+		logTestSuccess(commentName3);
+	} catch (error) {
+		logTestFailure(commentName3, error);
+	}
 }
 
 async function runWYSIWYGSmokeTests() {
