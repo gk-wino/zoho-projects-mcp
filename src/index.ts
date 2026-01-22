@@ -10,21 +10,37 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import 'dotenv/config';
 
-interface ZohoConfig {
-	accessToken: string;
-	portalId: string;
-	apiDomain?: string;
-	refreshToken?: string;
-	clientId?: string;
-	clientSecret?: string;
-	accountsDomain?: string;
-}
+import { ZohoClient } from './core/ZohoClient.js';
+import { loadZohoConfig } from './core/ZohoConfig.js';
+import { allToolSchemas } from './schemas/index.js';
+import {
+	PortalHandler,
+	ProjectHandler,
+	TaskHandler,
+	IssueHandler,
+	PhaseHandler,
+	SearchHandler,
+	TaskListHandler,
+	TeamHandler,
+	TagHandler,
+	UserHandler,
+} from './handlers/index.js';
 
 class ZohoProjectsServer {
 	private server: Server;
-	private config: ZohoConfig;
-	private baseUrl: string = 'https://projectsapi.zoho.com/api/v3';
-	private tokenExpiresAt: number = 0; // Unix timestamp in milliseconds
+	private client: ZohoClient;
+	private handlers: {
+		portals: PortalHandler;
+		projects: ProjectHandler;
+		tasks: TaskHandler;
+		issues: IssueHandler;
+		phases: PhaseHandler;
+		search: SearchHandler;
+		tasklists: TaskListHandler;
+		teams: TeamHandler;
+		tags: TagHandler;
+		users: UserHandler;
+	};
 
 	constructor() {
 		this.server = new Server(
@@ -39,1219 +55,91 @@ class ZohoProjectsServer {
 			},
 		);
 
-		// Load configuration from environment variables
-		this.config = {
-			accessToken: process.env.ZOHO_ACCESS_TOKEN || '',
-			portalId: process.env.ZOHO_PORTAL_ID || '',
-			apiDomain: process.env.ZOHO_API_DOMAIN || 'https://projectsapi.zoho.com',
-			refreshToken: process.env.ZOHO_REFRESH_TOKEN || '',
-			clientId: process.env.ZOHO_CLIENT_ID || '',
-			clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
-			accountsDomain: process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.com',
+		const config = loadZohoConfig();
+		this.client = new ZohoClient(config);
+
+		// Initialize all handlers
+		this.handlers = {
+			portals: new PortalHandler(this.client),
+			projects: new ProjectHandler(this.client),
+			tasks: new TaskHandler(this.client),
+			issues: new IssueHandler(this.client),
+			phases: new PhaseHandler(this.client),
+			search: new SearchHandler(this.client),
+			tasklists: new TaskListHandler(this.client),
+			teams: new TeamHandler(this.client),
+			tags: new TagHandler(this.client),
+			users: new UserHandler(this.client),
 		};
-
-		if (this.config.apiDomain) {
-			this.baseUrl = `${this.config.apiDomain}/api/v3`;
-		}
-
-		// Set initial token expiration (assume current token expires in 1 hour if not known)
-		this.tokenExpiresAt = Date.now() + 3600 * 1000;
 
 		this.setupHandlers();
 	}
 
-	private async refreshAccessToken(): Promise<void> {
-		if (!this.config.refreshToken || !this.config.clientId || !this.config.clientSecret) {
-			console.error('Cannot refresh token: missing refresh token, client ID, or client secret');
-			return;
-		}
-
-		try {
-			const params = new URLSearchParams({
-				refresh_token: this.config.refreshToken,
-				client_id: this.config.clientId,
-				client_secret: this.config.clientSecret,
-				grant_type: 'refresh_token',
-			});
-
-			const response = await fetch(`${this.config.accountsDomain}/oauth/v2/token`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: params.toString(),
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error(`Failed to refresh token: ${response.status} - ${errorText}`);
-			}
-
-			const data = (await response.json()) as {
-				access_token: string;
-				expires_in: number;
-			};
-
-			// Update access token and expiration time
-			this.config.accessToken = data.access_token;
-			// Set expiration to 5 minutes before actual expiry for safety margin
-			this.tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
-
-			console.error(`Access token refreshed successfully. Expires in ${data.expires_in} seconds.`);
-		} catch (error) {
-			console.error(`Error refreshing access token: ${error}`);
-			throw new McpError(ErrorCode.InternalError, `Failed to refresh access token: ${error}`);
-		}
-	}
-
-	private async makeRequest(
-		endpoint: string,
-		method: string = 'GET',
-		body?: any,
-		isRetry: boolean = false,
-		contentType: string = 'application/json',
-	): Promise<any> {
-		// Check if token needs refresh (5 minutes before expiry)
-		if (Date.now() >= this.tokenExpiresAt) {
-			await this.refreshAccessToken();
-		}
-
-		if (!this.config.accessToken) {
-			throw new McpError(
-				ErrorCode.InvalidRequest,
-				'Zoho access token not configured. Set ZOHO_ACCESS_TOKEN environment variable.',
-			);
-		}
-
-		const url = `${this.baseUrl}${endpoint}`;
-		const headers: Record<string, string> = {
-			'Authorization': `Zoho-oauthtoken ${this.config.accessToken}`,
-			'Content-Type': contentType,
-		};
-
-		const options: {
-			method: string;
-			headers: Record<string, string>;
-			body?: string;
-		} = {
-			method,
-			headers,
-		};
-
-		if (body && (method === 'POST' || method === 'PATCH' || method === 'PUT')) {
-			if (contentType === 'application/x-www-form-urlencoded') {
-				// Convert object to URL-encoded string
-				const params = new URLSearchParams();
-				for (const [key, value] of Object.entries(body)) {
-					if (Array.isArray(value)) {
-						params.append(key, JSON.stringify(value));
-					} else {
-						params.append(key, String(value));
-					}
-				}
-				options.body = params.toString();
-			} else {
-				options.body = JSON.stringify(body);
-			}
-		}
-
-		const response = await fetch(url, options);
-
-		if (!response.ok) {
-			const errorText = await response.text();
-
-			// If 401 and we have refresh credentials and haven't retried yet, try refresh
-			if (
-				response.status === 401 &&
-				!isRetry &&
-				this.config.refreshToken &&
-				this.config.clientId &&
-				this.config.clientSecret
-			) {
-				console.error('Received 401 error, attempting token refresh...');
-				try {
-					await this.refreshAccessToken();
-					// Retry the request once with new token
-					return await this.makeRequest(endpoint, method, body, true, contentType);
-				} catch (refreshError) {
-					console.error('Token refresh failed:', refreshError);
-					// Fall through to throw original error
-				}
-			}
-
-			throw new McpError(
-				ErrorCode.InternalError,
-				`Zoho API error: ${response.status} - ${errorText}`,
-			);
-		}
-
-		// Handle 204 No Content responses
-		if (response.status === 204) {
-			return { success: true, message: 'Operation completed successfully' };
-		}
-
-		// For other successful responses, parse JSON
-		const text = await response.text();
-		return text ? JSON.parse(text) : { success: true };
-	}
-
 	private setupHandlers() {
-		// List available tools
+		// List available tools - now centralized!
 		this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-			tools: [
-				// Portal operations
-				{
-					name: 'list_portals',
-					description: 'Retrieve all Zoho Projects portals',
-					inputSchema: {
-						type: 'object',
-						properties: {},
-					},
-				},
-				{
-					name: 'get_portal',
-					description: 'Get details of a specific portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							portal_id: { type: 'string', description: 'Portal ID' },
-						},
-						required: ['portal_id'],
-					},
-				},
-
-				// Project operations
-				{
-					name: 'list_projects',
-					description: 'List all projects in a portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-					},
-				},
-				{
-					name: 'get_project',
-					description: 'Get details of a specific project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-						},
-						required: ['project_id'],
-					},
-				},
-				{
-					name: 'create_project',
-					description: 'Create a new project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							name: { type: 'string', description: 'Project name' },
-							description: {
-								type: 'string',
-								description: 'Project description',
-							},
-							start_date: {
-								type: 'string',
-								description: 'Start date (YYYY-MM-DD)',
-							},
-							end_date: {
-								type: 'string',
-								description: 'End date (YYYY-MM-DD)',
-							},
-							is_public: {
-								type: 'boolean',
-								description: 'Is project public',
-								default: false,
-							},
-						},
-						required: ['name'],
-					},
-				},
-				{
-					name: 'update_project',
-					description: 'Update an existing project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							name: { type: 'string', description: 'Project name' },
-							description: {
-								type: 'string',
-								description: 'Project description',
-							},
-							start_date: {
-								type: 'string',
-								description: 'Start date (YYYY-MM-DD)',
-							},
-							end_date: {
-								type: 'string',
-								description: 'End date (YYYY-MM-DD)',
-							},
-							status: {
-								type: 'string',
-								description: 'Project status',
-								enum: ['active', 'template', 'archived'],
-							},
-						},
-						required: ['project_id'],
-					},
-				},
-				{
-					name: 'delete_project',
-					description: 'Delete a project (moves to trash)',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-						},
-						required: ['project_id'],
-					},
-				},
-
-				// Task operations
-				{
-					name: 'list_tasks',
-					description: 'List tasks from a project or portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (optional for portal-level)',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-					},
-				},
-				{
-					name: 'get_task',
-					description: 'Get details of a specific task',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							task_id: { type: 'string', description: 'Task ID' },
-						},
-						required: ['project_id', 'task_id'],
-					},
-				},
-				{
-					name: 'create_task',
-					description:
-						'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							tasklist_id: {
-								type: 'string',
-								description:
-									'Task list ID (optional - uses general/default task list if not provided. Get from list_tasklists)',
-							},
-							name: { type: 'string', description: 'Task name (required)' },
-							description: {
-								type: 'string',
-								description: 'Task description (optional)',
-							},
-							priority: {
-								type: 'string',
-								description: 'Task priority (optional)',
-								enum: ['none', 'low', 'medium', 'high'],
-							},
-							start_date: {
-								type: 'string',
-								description:
-									'Start date in ISO 8601 format (e.g., 2026-01-27T08:00:00Z or 2026-01-27T08:00:00.000Z)',
-							},
-							end_date: {
-								type: 'string',
-								description:
-									'End date in ISO 8601 format (e.g., 2026-02-05T17:00:00Z or 2026-02-05T17:00:00.000Z)',
-							},
-							assignee_zpuid: {
-								type: 'string',
-								description: 'Assignee user ZPUID (optional - get from list_users)',
-							},
-						},
-						required: ['project_id', 'name'],
-					},
-				},
-				{
-					name: 'update_task',
-					description:
-						'Update a task properties. You can also move a task to a different task list by providing tasklist_id.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							tasklist_id: {
-								type: 'string',
-								description:
-									'Task list ID (optional - only provide if moving task to different task list. Get from list_tasklists)',
-							},
-							name: {
-								type: 'string',
-								description: 'Task name (optional - only if updating)',
-							},
-							description: {
-								type: 'string',
-								description: 'Task description (optional - only if updating)',
-							},
-							priority: {
-								type: 'string',
-								description: 'Task priority (optional - only if updating)',
-								enum: ['none', 'low', 'medium', 'high'],
-							},
-							start_date: {
-								type: 'string',
-								description:
-									'Start date in ISO 8601 format (e.g., 2026-01-27T08:00:00Z or 2026-01-27T08:00:00.000Z)',
-							},
-							end_date: {
-								type: 'string',
-								description:
-									'End date in ISO 8601 format (e.g., 2026-02-05T17:00:00Z or 2026-02-05T17:00:00.000Z)',
-							},
-						},
-						required: ['project_id', 'task_id'],
-					},
-				},
-				{
-					name: 'delete_task',
-					description: 'Delete a task',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							task_id: { type: 'string', description: 'Task ID' },
-						},
-						required: ['project_id', 'task_id'],
-					},
-				},
-				{
-					name: 'move_task',
-					description:
-						'Move a task to a different task list within the same project. This requires the target task list ID and optional status mapping.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID to move (obtain from list_tasks or get_task)',
-							},
-							target_tasklist_id: {
-								type: 'string',
-								description:
-									'Target task list ID where task will be moved (obtain from list_tasklists)',
-							},
-						},
-						required: ['project_id', 'task_id', 'target_tasklist_id'],
-					},
-				},
-				{
-					name: 'get_associated_bugs',
-					description: 'Get all bugs/issues associated with a specific task',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-						},
-						required: ['project_id', 'task_id'],
-					},
-				},
-				{
-					name: 'associate_bugs',
-					description:
-						'Associate one or more bugs/issues with a task. This creates a link between the task and the specified bugs.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							bug_ids: {
-								type: 'array',
-								items: { type: 'string' },
-								description:
-									'Array of bug/issue IDs to associate with the task (obtain from list_issues)',
-							},
-						},
-						required: ['project_id', 'task_id', 'bug_ids'],
-					},
-				},
-				{
-					name: 'disassociate_bug',
-					description:
-						'Remove the association between a task and a bug/issue. This breaks the link but does not delete the bug.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							bug_id: {
-								type: 'string',
-								description:
-									'Bug/Issue ID to disassociate from the task (obtain from get_associated_bugs)',
-							},
-						},
-						required: ['project_id', 'task_id', 'bug_id'],
-					},
-				},
-
-				// Task Comments operations
-				{
-					name: 'list_task_comments',
-					description: 'Get all comments for a specific task',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							page: {
-								type: 'number',
-								description: 'Page number for pagination',
-								default: 1,
-							},
-							per_page: {
-								type: 'number',
-								description: 'Number of comments per page',
-								default: 10,
-							},
-							sort_by: {
-								type: 'string',
-								description: 'Sort order for comments (e.g., "created_time" or "modified_time")',
-							},
-						},
-						required: ['project_id', 'task_id'],
-					},
-				},
-				{
-					name: 'add_task_comment',
-					description: 'Add a new comment to a task',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							comment: {
-								type: 'string',
-								description: 'The comment text/content to add',
-							},
-							attachments: {
-								type: 'array',
-								items: { type: 'string' },
-								description: 'Optional array of attachment IDs',
-							},
-						},
-						required: ['project_id', 'task_id', 'comment'],
-					},
-				},
-				{
-					name: 'update_task_comment',
-					description: 'Update an existing task comment',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							comment_id: {
-								type: 'string',
-								description: 'Comment ID to update (obtain from list_task_comments)',
-							},
-							comment: {
-								type: 'string',
-								description: 'The updated comment text/content',
-							},
-							attachments: {
-								type: 'array',
-								items: { type: 'string' },
-								description: 'Optional array of attachment IDs',
-							},
-						},
-						required: ['project_id', 'task_id', 'comment_id', 'comment'],
-					},
-				},
-				{
-					name: 'delete_task_comment',
-					description: 'Delete a task comment',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							task_id: {
-								type: 'string',
-								description: 'Task ID (obtain from list_tasks or get_task)',
-							},
-							comment_id: {
-								type: 'string',
-								description: 'Comment ID to delete (obtain from list_task_comments)',
-							},
-						},
-						required: ['project_id', 'task_id', 'comment_id'],
-					},
-				},
-
-				// Issue operations
-				{
-					name: 'list_issues',
-					description:
-						'List issues from a project or portal. Requires page and per_page parameters.',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (optional for portal-level)',
-							},
-							page: {
-								type: 'number',
-								description: 'Page number (required)',
-								default: 1,
-							},
-							per_page: {
-								type: 'number',
-								description: 'Items per page (required)',
-								default: 10,
-							},
-						},
-						required: ['page', 'per_page'],
-					},
-				},
-				{
-					name: 'get_issue',
-					description: 'Get details of a specific issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'create_issue',
-					description: 'Create a new issue in a project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							name: { type: 'string', description: 'Issue name/title' },
-							description: { type: 'string', description: 'Issue description' },
-							flag: {
-								type: 'string',
-								description: 'Issue flag type',
-								enum: ['Internal', 'External'],
-							},
-							due_date: {
-								type: 'string',
-								description: 'Due date (YYYY-MM-DD)',
-							},
-							assignee_zpuid: {
-								type: 'string',
-								description: 'Assignee user ZPUID',
-							},
-							severity_id: { type: 'string', description: 'Severity ID' },
-							classification_id: {
-								type: 'string',
-								description: 'Classification ID',
-							},
-							module_id: { type: 'string', description: 'Module ID' },
-						},
-						required: ['project_id', 'name'],
-					},
-				},
-				{
-					name: 'update_issue',
-					description: 'Update an existing issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							name: { type: 'string', description: 'Issue name/title' },
-							description: { type: 'string', description: 'Issue description' },
-							flag: {
-								type: 'string',
-								description: 'Issue flag type',
-								enum: ['Internal', 'External'],
-							},
-							due_date: {
-								type: 'string',
-								description: 'Due date (YYYY-MM-DD)',
-							},
-							assignee_zpuid: {
-								type: 'string',
-								description: 'Assignee user ZPUID',
-							},
-							severity_id: { type: 'string', description: 'Severity ID' },
-							classification_id: {
-								type: 'string',
-								description: 'Classification ID',
-							},
-							module_id: { type: 'string', description: 'Module ID' },
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'delete_issue',
-					description: 'Delete an issue from a project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'move_issue',
-					description: 'Move an issue to another project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Source project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							to_project: { type: 'string', description: 'Target project ID' },
-						},
-						required: ['project_id', 'issue_id', 'to_project'],
-					},
-				},
-				{
-					name: 'clone_issue',
-					description: 'Clone an issue within the same project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'get_issue_activities',
-					description: 'Get activities performed on an issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'get_issue_comments',
-					description: 'Get all comments of an issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-						required: ['project_id', 'issue_id'],
-					},
-				},
-				{
-					name: 'add_issue_comment',
-					description: 'Add a comment to an issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							comment: { type: 'string', description: 'Comment content' },
-						},
-						required: ['project_id', 'issue_id', 'comment'],
-					},
-				},
-				{
-					name: 'update_issue_comment',
-					description: 'Update a comment on an issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							comment_id: { type: 'string', description: 'Comment ID' },
-							comment: {
-								type: 'string',
-								description: 'Updated comment content',
-							},
-						},
-						required: ['project_id', 'issue_id', 'comment_id', 'comment'],
-					},
-				},
-				{
-					name: 'delete_issue_comment',
-					description: 'Delete a comment from an issue',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							issue_id: { type: 'string', description: 'Issue ID' },
-							comment_id: { type: 'string', description: 'Comment ID' },
-						},
-						required: ['project_id', 'issue_id', 'comment_id'],
-					},
-				},
-
-				// Milestone/Phase operations
-				{
-					name: 'list_phases',
-					description: 'List phases/milestones from a project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-						required: ['project_id'],
-					},
-				},
-				{
-					name: 'create_phase',
-					description: 'Create a new phase/milestone',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							name: { type: 'string', description: 'Phase name' },
-							start_date: {
-								type: 'string',
-								description: 'Start date (YYYY-MM-DD)',
-							},
-							end_date: {
-								type: 'string',
-								description: 'End date (YYYY-MM-DD)',
-							},
-							owner_zpuid: { type: 'string', description: 'Owner user ZPUID' },
-						},
-						required: ['project_id', 'name'],
-					},
-				},
-
-				// Search
-				{
-					name: 'search',
-					description: 'Search across portal or project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							search_term: {
-								type: 'string',
-								description: 'Search term/query',
-							},
-							project_id: {
-								type: 'string',
-								description: 'Project ID (optional for portal-level search)',
-							},
-							module: {
-								type: 'string',
-								description: 'Module to search in',
-								enum: ['all', 'projects', 'tasks', 'issues', 'milestones', 'forums', 'events'],
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-						required: ['search_term'],
-					},
-				},
-
-				// Task List operations
-				{
-					name: 'list_tasklists',
-					description: 'List task lists from a project or portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (optional for portal-level)',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-						},
-					},
-				},
-				{
-					name: 'get_tasklist',
-					description: 'Get details of a specific task list',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							tasklist_id: { type: 'string', description: 'Task List ID' },
-						},
-						required: ['project_id', 'tasklist_id'],
-					},
-				},
-				{
-					name: 'create_tasklist',
-					description: 'Create a new task list in a project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							name: { type: 'string', description: 'Task list name' },
-							milestone_id: {
-								type: 'string',
-								description: 'Milestone ID (optional)',
-							},
-							flag: {
-								type: 'string',
-								description: 'Task list flag',
-								enum: ['internal', 'external'],
-							},
-							status: { type: 'string', description: 'Task list status' },
-						},
-						required: ['project_id', 'name'],
-					},
-				},
-				{
-					name: 'update_tasklist',
-					description: 'Update a task list',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							tasklist_id: { type: 'string', description: 'Task List ID' },
-							name: { type: 'string', description: 'Task list name' },
-							milestone_id: { type: 'string', description: 'Milestone ID' },
-							flag: {
-								type: 'string',
-								description: 'Task list flag',
-								enum: ['internal', 'external'],
-							},
-							status: { type: 'string', description: 'Task list status' },
-						},
-						required: ['project_id', 'tasklist_id'],
-					},
-				},
-				{
-					name: 'delete_tasklist',
-					description: 'Delete a task list',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							tasklist_id: { type: 'string', description: 'Task List ID' },
-						},
-						required: ['project_id', 'tasklist_id'],
-					},
-				},
-				{
-					name: 'create_default_tasklist',
-					description: 'Create a default task list for a project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							flag: {
-								type: 'string',
-								description: 'Task list flag',
-								enum: ['internal', 'external'],
-							},
-						},
-						required: ['project_id', 'flag'],
-					},
-				},
-
-				// Users
-				{
-					name: 'list_users',
-					description: 'List users in a portal or project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (optional for portal-level)',
-							},
-						},
-					},
-				},
-
-				// Teams
-				{
-					name: 'get_team_details',
-					description: 'Retrieve team details from the Zoho Projects portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							id: { type: 'string', description: 'Team ID (optional)' },
-							search_term: {
-								type: 'string',
-								description: 'Search by team name (optional)',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-							last_modified_time: {
-								type: 'string',
-								description: 'Last modification time filter (optional)',
-							},
-							sort_by: {
-								type: 'string',
-								description: 'Sort order, e.g., "desc(name)" or "asc(name)"',
-							},
-						},
-					},
-				},
-				{
-					name: 'get_projects_team',
-					description: 'Retrieve teams from a specific project',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							project_id: {
-								type: 'string',
-								description: 'Project ID (obtain from list_projects)',
-							},
-							id: { type: 'string', description: 'Team ID (optional)' },
-							search_term: {
-								type: 'string',
-								description: 'Search by team name (optional)',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-							last_modified_time: {
-								type: 'string',
-								description: 'Last modification time filter (optional)',
-							},
-							sort_by: {
-								type: 'string',
-								description: 'Sort order, e.g., "desc(name)" or "asc(name)"',
-							},
-						},
-						required: ['project_id'],
-					},
-				},
-				{
-					name: 'get_team_users',
-					description: 'Retrieve users from one or more teams',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							team_ids: {
-								type: 'string',
-								description:
-									'Comma-separated team IDs as JSON array string, e.g., "[4000000062001,4000000015029]"',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-							last_modified_time: {
-								type: 'string',
-								description: 'Last modification time filter (optional)',
-							},
-						},
-					},
-				},
-				{
-					name: 'get_teams_projects',
-					description: 'Retrieve projects associated with one or more teams',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							team_ids: {
-								type: 'string',
-								description:
-									'Comma-separated team IDs as JSON array string, e.g., "[4000000062001,4000000015029]"',
-							},
-							page: { type: 'number', description: 'Page number', default: 1 },
-							per_page: {
-								type: 'number',
-								description: 'Items per page',
-								default: 10,
-							},
-							last_modified_time: {
-								type: 'string',
-								description: 'Last modification time filter (optional)',
-							},
-						},
-					},
-				},
-
-				// Tags operations
-				{
-					name: 'list_tags',
-					description: 'List all tags in a portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							name: {
-								type: 'string',
-								description: 'Filter tags by name (optional)',
-							},
-						},
-					},
-				},
-				{
-					name: 'delete_tag',
-					description: 'Delete a tag from the portal',
-					inputSchema: {
-						type: 'object',
-						properties: {
-							tag_id: { type: 'string', description: 'Tag ID' },
-						},
-						required: ['tag_id'],
-					},
-				},
-			],
+			tools: allToolSchemas,
 		}));
 
 		// Handle tool execution
 		this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
 			const { name, arguments: args } = request.params;
-
-			// Cast args to any since JSON schema validation handles type safety
 			const params = (args || {}) as any;
 
 			try {
 				switch (name) {
 					// Portal operations
 					case 'list_portals':
-						return await this.listPortals();
+						return await this.handlers.portals.listPortals();
 					case 'get_portal':
-						return await this.getPortal(params.portal_id);
+						return await this.handlers.portals.getPortal(params.portal_id);
 
 					// Project operations
 					case 'list_projects':
-						return await this.listProjects(params.page, params.per_page);
+						return await this.handlers.projects.listProjects(params.page, params.per_page);
 					case 'get_project':
-						return await this.getProject(params.project_id);
+						return await this.handlers.projects.getProject(params.project_id);
 					case 'create_project':
-						return await this.createProject(params);
+						return await this.handlers.projects.createProject(params);
 					case 'update_project':
-						return await this.updateProject(params);
+						return await this.handlers.projects.updateProject(params);
 					case 'delete_project':
-						return await this.deleteProject(params.project_id);
+						return await this.handlers.projects.deleteProject(params.project_id);
 
 					// Task operations
 					case 'list_tasks':
-						return await this.listTasks(params.project_id, params.page, params.per_page);
+						return await this.handlers.tasks.listTasks(
+							params.project_id,
+							params.page,
+							params.per_page,
+						);
 					case 'get_task':
-						return await this.getTask(params.project_id, params.task_id);
+						return await this.handlers.tasks.getTask(params.project_id, params.task_id);
 					case 'create_task':
-						return await this.createTask(params);
+						return await this.handlers.tasks.createTask(params);
 					case 'update_task':
-						return await this.updateTask(params);
+						return await this.handlers.tasks.updateTask(params);
 					case 'delete_task':
-						return await this.deleteTask(params.project_id, params.task_id);
+						return await this.handlers.tasks.deleteTask(params.project_id, params.task_id);
 					case 'move_task':
-						return await this.moveTask(params);
+						return await this.handlers.tasks.moveTask(params);
 					case 'get_associated_bugs':
-						return await this.getAssociatedBugs(params.project_id, params.task_id);
+						return await this.handlers.tasks.getAssociatedBugs(
+							params.project_id,
+							params.task_id,
+						);
 					case 'associate_bugs':
-						return await this.associateBugs(params);
+						return await this.handlers.tasks.associateBugs(params);
 					case 'disassociate_bug':
-						return await this.disassociateBug(params.project_id, params.task_id, params.bug_id);
+						return await this.handlers.tasks.disassociateBug(
+							params.project_id,
+							params.task_id,
+							params.bug_id,
+						);
 
 					// Task Comments operations
 					case 'list_task_comments':
-						return await this.listTaskComments(
+						return await this.handlers.tasks.listTaskComments(
 							params.project_id,
 							params.task_id,
 							params.page,
@@ -1259,11 +147,11 @@ class ZohoProjectsServer {
 							params.sort_by,
 						);
 					case 'add_task_comment':
-						return await this.addTaskComment(params);
+						return await this.handlers.tasks.addTaskComment(params);
 					case 'update_task_comment':
-						return await this.updateTaskComment(params);
+						return await this.handlers.tasks.updateTaskComment(params);
 					case 'delete_task_comment':
-						return await this.deleteTaskComment(
+						return await this.handlers.tasks.deleteTaskComment(
 							params.project_id,
 							params.task_id,
 							params.comment_id,
@@ -1271,29 +159,33 @@ class ZohoProjectsServer {
 
 					// Issue operations
 					case 'list_issues':
-						return await this.listIssues(params.project_id, params.page, params.per_page);
+						return await this.handlers.issues.listIssues(
+							params.project_id,
+							params.page,
+							params.per_page,
+						);
 					case 'get_issue':
-						return await this.getIssue(params.project_id, params.issue_id);
+						return await this.handlers.issues.getIssue(params.project_id, params.issue_id);
 					case 'create_issue':
-						return await this.createIssue(params);
+						return await this.handlers.issues.createIssue(params);
 					case 'update_issue':
-						return await this.updateIssue(params);
+						return await this.handlers.issues.updateIssue(params);
 					case 'delete_issue':
-						return await this.deleteIssue(params.project_id, params.issue_id);
+						return await this.handlers.issues.deleteIssue(params.project_id, params.issue_id);
 					case 'move_issue':
-						return await this.moveIssue(params);
+						return await this.handlers.issues.moveIssue(params);
 					case 'clone_issue':
-						return await this.cloneIssue(params.project_id, params.issue_id);
+						return await this.handlers.issues.cloneIssue(params.project_id, params.issue_id);
 					case 'get_issue_activities':
-						return await this.getIssueActivities(params);
+						return await this.handlers.issues.getIssueActivities(params);
 					case 'get_issue_comments':
-						return await this.getIssueComments(params);
+						return await this.handlers.issues.getIssueComments(params);
 					case 'add_issue_comment':
-						return await this.addIssueComment(params);
+						return await this.handlers.issues.addIssueComment(params);
 					case 'update_issue_comment':
-						return await this.updateIssueComment(params);
+						return await this.handlers.issues.updateIssueComment(params);
 					case 'delete_issue_comment':
-						return await this.deleteIssueComment(
+						return await this.handlers.issues.deleteIssueComment(
 							params.project_id,
 							params.issue_id,
 							params.comment_id,
@@ -1301,47 +193,64 @@ class ZohoProjectsServer {
 
 					// Phase operations
 					case 'list_phases':
-						return await this.listPhases(params.project_id, params.page, params.per_page);
+						return await this.handlers.phases.listPhases(
+							params.project_id,
+							params.page,
+							params.per_page,
+						);
 					case 'create_phase':
-						return await this.createPhase(params);
+						return await this.handlers.phases.createPhase(params);
 
 					// Search
 					case 'search':
-						return await this.search(params);
+						return await this.handlers.search.search(params);
 
 					// Task List operations
 					case 'list_tasklists':
-						return await this.listTaskLists(params.project_id, params.page, params.per_page);
+						return await this.handlers.tasklists.listTaskLists(
+							params.project_id,
+							params.page,
+							params.per_page,
+						);
 					case 'get_tasklist':
-						return await this.getTaskList(params.project_id, params.tasklist_id);
+						return await this.handlers.tasklists.getTaskList(
+							params.project_id,
+							params.tasklist_id,
+						);
 					case 'create_tasklist':
-						return await this.createTaskList(params);
+						return await this.handlers.tasklists.createTaskList(params);
 					case 'update_tasklist':
-						return await this.updateTaskList(params);
+						return await this.handlers.tasklists.updateTaskList(params);
 					case 'delete_tasklist':
-						return await this.deleteTaskList(params.project_id, params.tasklist_id);
+						return await this.handlers.tasklists.deleteTaskList(
+							params.project_id,
+							params.tasklist_id,
+						);
 					case 'create_default_tasklist':
-						return await this.createDefaultTaskList(params.project_id, params.flag);
+						return await this.handlers.tasklists.createDefaultTaskList(
+							params.project_id,
+							params.flag,
+						);
 
 					// Users
 					case 'list_users':
-						return await this.listUsers(params.project_id);
+						return await this.handlers.users.listUsers(params.project_id);
 
 					// Teams
 					case 'get_team_details':
-						return await this.getTeamDetails(params);
+						return await this.handlers.teams.getTeamDetails(params);
 					case 'get_projects_team':
-						return await this.getProjectsTeam(params);
+						return await this.handlers.teams.getProjectsTeam(params);
 					case 'get_team_users':
-						return await this.getTeamUsers(params);
+						return await this.handlers.teams.getTeamUsers(params);
 					case 'get_teams_projects':
-						return await this.getTeamsProjects(params);
+						return await this.handlers.teams.getTeamsProjects(params);
 
 					// Tags
 					case 'list_tags':
-						return await this.listTags(params.name);
+						return await this.handlers.tags.listTags(params.name);
 					case 'delete_tag':
-						return await this.deleteTag(params.tag_id);
+						return await this.handlers.tags.deleteTag(params.tag_id);
 
 					default:
 						throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -1351,835 +260,6 @@ class ZohoProjectsServer {
 				throw new McpError(ErrorCode.InternalError, `Error executing ${name}: ${error}`);
 			}
 		});
-	}
-
-	// Portal operations
-	private async listPortals() {
-		const data = await this.makeRequest('/portals');
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getPortal(portalId: string) {
-		const data = await this.makeRequest(`/portal/${portalId}`);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	// Project operations
-	private async listProjects(page: number = 1, perPage: number = 10) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects?page=${page}&per_page=${perPage}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getProject(projectId: string) {
-		const data = await this.makeRequest(`/portal/${this.config.portalId}/projects/${projectId}`);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async createProject(params: any) {
-		const data = await this.makeRequest(`/portal/${this.config.portalId}/projects`, 'POST', params);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Project created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateProject(params: any) {
-		const { project_id, ...updateData } = params;
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}`,
-			'PATCH',
-			updateData,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Project updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteProject(projectId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/trash`,
-			'POST',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Project moved to trash successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	// Task operations
-	private async listTasks(projectId?: string, page: number = 1, perPage: number = 10) {
-		const endpoint = projectId
-			? `/portal/${this.config.portalId}/projects/${projectId}/tasks?page=${page}&per_page=${perPage}`
-			: `/portal/${this.config.portalId}/tasks?page=${page}&per_page=${perPage}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getTask(projectId: string, taskId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async createTask(params: any) {
-		const { project_id, tasklist_id, assignee_zpuid, ...taskData } = params;
-
-		// Build task data according to API spec
-		const requestBody: any = {
-			...taskData,
-		};
-
-		// Add tasklist if provided, otherwise API will use general tasklist
-		if (tasklist_id) {
-			requestBody.tasklist = { id: tasklist_id };
-		}
-
-		// Add owners_and_work if assignee is provided
-		if (assignee_zpuid) {
-			requestBody.owners_and_work = {
-				owners: [
-					{
-						zpuid: assignee_zpuid,
-					},
-				],
-			};
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks`,
-			'POST',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateTask(params: any) {
-		const { project_id, task_id, tasklist_id, ...taskData } = params;
-
-		// Build task data according to API spec
-		const requestBody: any = {
-			...taskData,
-		};
-
-		// Add tasklist if provided (for moving task to different task list)
-		if (tasklist_id) {
-			requestBody.tasklist = { id: tasklist_id };
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}`,
-			'PATCH',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteTask(projectId: string, taskId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task deleted successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async moveTask(params: any) {
-		const { project_id, task_id, target_tasklist_id } = params;
-		const requestBody: any = {
-			target_tasklist_id: target_tasklist_id,
-		};
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/move`,
-			'POST',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task moved successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async getAssociatedBugs(projectId: string, taskId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/associated-bugs`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async associateBugs(params: any) {
-		const { project_id, task_id, bug_ids } = params;
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/associate-bugs`,
-			'POST',
-			{ bug_ids: bug_ids },
-			false,
-			'application/x-www-form-urlencoded',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Bugs associated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async disassociateBug(projectId: string, taskId: string, bugId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/bug/${bugId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Bug disassociated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	// Task Comments operations
-	private async listTaskComments(
-		projectId: string,
-		taskId: string,
-		page: number = 1,
-		perPage: number = 10,
-		sortBy?: string,
-	) {
-		let endpoint = `/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/comments?page=${page}&per_page=${perPage}`;
-		if (sortBy) {
-			endpoint += `&sort_by=${encodeURIComponent(sortBy)}`;
-		}
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async addTaskComment(params: any) {
-		const { project_id, task_id, comment, attachments } = params;
-
-		const requestBody: any = {
-			comment: comment,
-		};
-
-		if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-			requestBody.attachments = attachments;
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/comments`,
-			'POST',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Comment added successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateTaskComment(params: any) {
-		const { project_id, task_id, comment_id, comment, attachments } = params;
-
-		const requestBody: any = {
-			comment: comment,
-		};
-
-		if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-			requestBody.attachments = attachments;
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/comments/${comment_id}`,
-			'PATCH',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Comment updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteTaskComment(projectId: string, taskId: string, commentId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/comments/${commentId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Comment deleted successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	// Issue operations
-	private async listIssues(projectId?: string, page: number = 1, perPage: number = 10) {
-		const endpoint = projectId
-			? `/portal/${this.config.portalId}/projects/${projectId}/issues?page=${page}&per_page=${perPage}`
-			: `/portal/${this.config.portalId}/issues?page=${page}&per_page=${perPage}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getIssue(projectId: string, issueId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async createIssue(params: any) {
-		const { project_id, assignee_zpuid, severity_id, classification_id, module_id, ...issueData } =
-			params;
-
-		// Build request body with proper structure
-		const requestBody: any = {
-			...issueData,
-		};
-
-		// Add assignee if provided
-		if (assignee_zpuid) {
-			requestBody.assignee = { zpuid: assignee_zpuid };
-		}
-
-		// Add severity if provided
-		if (severity_id) {
-			requestBody.severity = { id: severity_id };
-		}
-
-		// Add classification if provided
-		if (classification_id) {
-			requestBody.classification = { id: classification_id };
-		}
-
-		// Add module if provided
-		if (module_id) {
-			requestBody.module = { id: module_id };
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues`,
-			'POST',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Issue created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateIssue(params: any) {
-		const {
-			project_id,
-			issue_id,
-			assignee_zpuid,
-			severity_id,
-			classification_id,
-			module_id,
-			...issueData
-		} = params;
-
-		// Build request body with proper structure
-		const requestBody: any = {
-			...issueData,
-		};
-
-		// Add assignee if provided
-		if (assignee_zpuid) {
-			requestBody.assignee = { zpuid: assignee_zpuid };
-		}
-
-		// Add severity if provided
-		if (severity_id) {
-			requestBody.severity = { id: severity_id };
-		}
-
-		// Add classification if provided
-		if (classification_id) {
-			requestBody.classification = { id: classification_id };
-		}
-
-		// Add module if provided
-		if (module_id) {
-			requestBody.module = { id: module_id };
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}`,
-			'PATCH',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Issue updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteIssue(projectId: string, issueId: string) {
-		await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: 'Issue deleted successfully',
-				},
-			],
-		};
-	}
-
-	private async moveIssue(params: any) {
-		const { project_id, issue_id, to_project } = params;
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/move`,
-			'POST',
-			{ to_project },
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Issue moved successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async cloneIssue(projectId: string, issueId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}/clone`,
-			'POST',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Issue cloned successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async getIssueActivities(params: any) {
-		const { project_id, issue_id, page = 1, per_page = 10 } = params;
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/activities?page=${page}&per_page=${per_page}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	// Issue Comments operations
-	private async getIssueComments(params: any) {
-		const { project_id, issue_id, page = 1, per_page = 10 } = params;
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments?page=${page}&per_page=${per_page}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async addIssueComment(params: any) {
-		const { project_id, issue_id, comment, notify_users, attachment_ids } = params;
-
-		const requestBody: any = { comment };
-		if (notify_users) requestBody.notify_users = notify_users;
-		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments`,
-			'POST',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Comment added successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateIssueComment(params: any) {
-		const { project_id, issue_id, comment_id, comment, notify_users, attachment_ids } = params;
-
-		const requestBody: any = { comment };
-		if (notify_users) requestBody.notify_users = notify_users;
-		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/issues/${issue_id}/comments/${comment_id}`,
-			'PATCH',
-			requestBody,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Comment updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteIssueComment(projectId: string, issueId: string, commentId: string) {
-		await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/issues/${issueId}/comments/${commentId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: 'Comment deleted successfully',
-				},
-			],
-		};
-	}
-
-	// Phase operations
-	private async listPhases(projectId: string, page: number = 1, perPage: number = 10) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/phases?page=${page}&per_page=${perPage}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async createPhase(params: any) {
-		const { project_id, ...phaseData } = params;
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/phases`,
-			'POST',
-			phaseData,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Phase created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	// Search
-	private async search(params: any) {
-		const { search_term, project_id, module = 'all', page = 1, per_page = 10 } = params;
-		const endpoint = project_id
-			? `/portal/${this.config.portalId}/projects/${project_id}/search?search_term=${encodeURIComponent(search_term)}&module=${module}&page=${page}&per_page=${per_page}`
-			: `/portal/${this.config.portalId}/search?search_term=${encodeURIComponent(search_term)}&module=${module}&status=active&page=${page}&per_page=${per_page}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	// Task List operations
-	private async listTaskLists(projectId?: string, page: number = 1, perPage: number = 10) {
-		const endpoint = projectId
-			? `/portal/${this.config.portalId}/projects/${projectId}/tasklists?page=${page}&per_page=${perPage}`
-			: `/portal/${this.config.portalId}/all-tasklists?page=${page}&per_page=${perPage}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getTaskList(projectId: string, tasklistId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasklists/${tasklistId}`,
-		);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async createTaskList(params: any) {
-		const { project_id, name, milestone_id, flag, status } = params;
-		const tasklistData: any = { name };
-
-		if (milestone_id) {
-			tasklistData.milestone = { id: milestone_id };
-		}
-		if (flag) {
-			tasklistData.flag = flag;
-		}
-		if (status) {
-			tasklistData.status = status;
-		}
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasklists`,
-			'POST',
-			tasklistData,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task list created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async updateTaskList(params: any) {
-		const { project_id, tasklist_id, name, milestone_id, flag, status } = params;
-		const tasklistData: any = {};
-
-		if (name) tasklistData.name = name;
-		if (milestone_id) {
-			tasklistData.milestone = { id: milestone_id };
-		}
-		if (flag) tasklistData.flag = flag;
-		if (status) tasklistData.status = status;
-
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${project_id}/tasklists/${tasklist_id}`,
-			'PATCH',
-			tasklistData,
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task list updated successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async deleteTaskList(projectId: string, tasklistId: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/tasklists/${tasklistId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Task list deleted successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	private async createDefaultTaskList(projectId: string, flag: string) {
-		const data = await this.makeRequest(
-			`/portal/${this.config.portalId}/projects/${projectId}/default-tasklists`,
-			'POST',
-			{ flag },
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Default task list created successfully:\n${JSON.stringify(data, null, 2)}`,
-				},
-			],
-		};
-	}
-
-	// Users
-	private async listUsers(projectId?: string) {
-		const endpoint = projectId
-			? `/portal/${this.config.portalId}/projects/${projectId}/users`
-			: `/portal/${this.config.portalId}/users`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	// Teams operations
-	private async getTeamDetails(params: any) {
-		const queryParams = new URLSearchParams();
-		if (params.id) queryParams.append('id', params.id);
-		if (params.search_term) queryParams.append('search_term', params.search_term);
-		if (params.page) queryParams.append('page', params.page.toString());
-		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-		if (params.last_modified_time)
-			queryParams.append('last_modified_time', params.last_modified_time);
-		if (params.sort_by) queryParams.append('sort_by', params.sort_by);
-
-		const endpoint = `/portal/${this.config.portalId}/teams${
-			queryParams.toString() ? `?${queryParams.toString()}` : ''
-		}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getProjectsTeam(params: any) {
-		const queryParams = new URLSearchParams();
-		if (params.id) queryParams.append('id', params.id);
-		if (params.search_term) queryParams.append('search_term', params.search_term);
-		if (params.page) queryParams.append('page', params.page.toString());
-		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-		if (params.last_modified_time)
-			queryParams.append('last_modified_time', params.last_modified_time);
-		if (params.sort_by) queryParams.append('sort_by', params.sort_by);
-
-		const endpoint = `/portal/${this.config.portalId}/projects/${params.project_id}/teams${
-			queryParams.toString() ? `?${queryParams.toString()}` : ''
-		}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getTeamUsers(params: any) {
-		const queryParams = new URLSearchParams();
-		if (params.team_ids) queryParams.append('team_ids', params.team_ids);
-		if (params.page) queryParams.append('page', params.page.toString());
-		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-		if (params.last_modified_time)
-			queryParams.append('last_modified_time', params.last_modified_time);
-
-		const endpoint = `/portal/${this.config.portalId}/teams/users${
-			queryParams.toString() ? `?${queryParams.toString()}` : ''
-		}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async getTeamsProjects(params: any) {
-		const queryParams = new URLSearchParams();
-		if (params.team_ids) queryParams.append('team_ids', params.team_ids);
-		if (params.page) queryParams.append('page', params.page.toString());
-		if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-		if (params.last_modified_time)
-			queryParams.append('last_modified_time', params.last_modified_time);
-
-		const endpoint = `/portal/${this.config.portalId}/teams/projects${
-			queryParams.toString() ? `?${queryParams.toString()}` : ''
-		}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	// Tags operations
-	private async listTags(name?: string) {
-		const queryParams = new URLSearchParams();
-		if (name) queryParams.append('name', name);
-
-		const endpoint = `/portal/${this.config.portalId}/tags${
-			queryParams.toString() ? `?${queryParams.toString()}` : ''
-		}`;
-		const data = await this.makeRequest(endpoint);
-		return {
-			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-		};
-	}
-
-	private async deleteTag(tagId: string) {
-		const endpoint = `/portal/${this.config.portalId}/tags/${tagId}`;
-		await this.makeRequest(endpoint, 'DELETE');
-		return {
-			content: [
-				{
-					type: 'text',
-					text: JSON.stringify({
-						success: true,
-						message: `Tag ${tagId} deleted successfully`,
-					}),
-				},
-			],
-		};
 	}
 
 	async run() {

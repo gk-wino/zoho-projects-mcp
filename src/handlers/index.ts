@@ -1,0 +1,9 @@
+export { PortalHandler } from './PortalHandler.js';
+export { ProjectHandler } from './ProjectHandler.js';
+export { TaskHandler } from './TaskHandler.js';
+export { IssueHandler } from './IssueHandler.js';
+export { PhaseHandler, SearchHandler } from './PhaseHandler.js';
+export { TaskListHandler } from './TaskListHandler.js';
+export { TeamHandler } from './TeamHandler.js';
+export { TagHandler } from './TagHandler.js';
+export { UserHandler } from './UserHandler.js';
