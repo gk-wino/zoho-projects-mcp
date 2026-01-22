@@ -6,10 +6,15 @@ Smoke tests verify that the basic functionality of the Zoho Projects MCP server 
 
 ```
 tests/smoke/
-├── utils.ts          # Common utilities for all smoke tests
-├── portal.test.ts    # Portal functionality tests
-├── project.test.ts   # Project functionality tests
-└── README.md         # This file
+├── utils.ts             # Common utilities for all smoke tests
+├── portal.test.ts       # Portal functionality tests
+├── project.test.ts      # Project functionality tests
+├── phase.test.ts        # Phase/Milestone functionality tests
+├── task.test.ts         # Task functionality tests
+├── tasklist.test.ts     # Task List functionality tests
+├── wysiwyg.test.ts      # WYSIWYG editor formatting tests
+├── inspect-task.test.ts # Task inspector utility (for debugging HTML)
+└── README.md            # This file
 ```
 
 ## Utilities (`utils.ts`)
@@ -844,6 +849,197 @@ To add smoke tests for other domains (tasks, issues, etc.):
    ```bash
    node tests/smoke/task.test.js
    ```
+
+## Best Practices
+
+1. **Always cleanup** - Call `cleanup(client)` in both success and error paths before exit
+2. **Explicit exit** - Call `process.exit(0)` for success or `process.exit(1)` for failures to ensure clean termination
+3. **Validate responses** - Check response structure and data
+4. **Use real data** - Tests should use actual API credentials
+5. **Add delays** - Use `wait()` between tests to avoid rate limits
+6. **Log clearly** - Use provided logging functions for consistent output
+7. **Handle errors** - Catch and log errors with context
+
+## Task Inspector Utility
+
+The `inspect-task.test.ts` utility helps you understand how Zoho Projects formats HTML content in task descriptions, especially for complex formatting like multiline code blocks.
+
+### Purpose
+
+When creating tasks with rich HTML content (code blocks, tables, etc.), it can be unclear how Zoho expects the HTML to be structured. This utility lets you:
+
+1. Create a test task programmatically
+2. Edit it manually in the Zoho Projects portal using their WYSIWYG editor
+3. Read back the task to see the exact HTML structure Zoho generates
+4. Use that HTML structure in your automated tests
+
+### Usage
+
+#### 1. Create a Test Task
+
+```bash
+npm run inspect:task -- create
+```
+
+This creates a task with a unique name like `INSPECT-1234567890 - Manual Edit Task`. The output will show you the task ID and name.
+
+**Example output:**
+
+```
+✅ Task created successfully!
+
+Task ID: 1817452000005350387
+Task Name: INSPECT-1769122811580 - Manual Edit Task
+
+📋 Instructions:
+1. Go to your Zoho Projects portal
+2. Find the task named: INSPECT-1769122811580 - Manual Edit Task
+3. Edit the task description and add multiline code examples using the WYSIWYG editor
+4. Save the changes
+5. Run: npm run inspect:task -- read 1817452000005350387
+```
+
+#### 2. Edit in Zoho Portal
+
+1. Open your Zoho Projects portal
+2. Navigate to the test project (default: "Zoho Project MCP Tests")
+3. Find the task by name (e.g., `INSPECT-1769122811580 - Manual Edit Task`)
+4. Click edit and use the WYSIWYG editor to add:
+   - Multiline code blocks
+   - Complex formatting (bold, italic, lists)
+   - Any other HTML content you want to test
+5. Save the task
+
+#### 3. Read the Task HTML
+
+```bash
+npm run inspect:task -- read <task_id>
+```
+
+**Example:**
+
+```bash
+npm run inspect:task -- read 1817452000005350387
+```
+
+This will display:
+
+- Complete task details (name, priority)
+- Full HTML description content
+- Extracted code blocks (if any)
+
+**Example output:**
+
+```
+================================================================================
+TASK DETAILS
+================================================================================
+Name: INSPECT-1769122811580 - Manual Edit Task
+Priority: high
+
+================================================================================
+DESCRIPTION (HTML)
+================================================================================
+<p>Here is some code:</p>
+<pre><code>function example() {
+  console.log('Hello, World!');
+  return true;
+}</code></pre>
+<p>End of code example.</p>
+================================================================================
+
+================================================================================
+EXTRACTED CODE BLOCKS
+================================================================================
+
+--- Code Block 1 ---
+<pre><code>function example() {
+  console.log('Hello, World!');
+  return true;
+}</code></pre>
+================================================================================
+```
+
+#### 4. List All Inspect Tasks
+
+```bash
+npm run inspect:task -- list
+```
+
+Shows all tasks with names containing "INSPECT-" or "Manual Edit Task".
+
+**Example output:**
+
+```
+Found 2 INSPECT task(s):
+
+1. INSPECT-1769122811580 - Manual Edit Task
+   ID: 1817452000005350387
+   Created: 2025-01-23T10:30:00Z
+
+2. INSPECT-1769123456789 - Manual Edit Task
+   ID: 1817452000005350999
+   Created: 2025-01-23T11:45:00Z
+
+To read a task, run: npm run inspect:task -- read <task_id>
+```
+
+#### 5. Delete a Test Task
+
+```bash
+npm run inspect:task -- delete <task_id>
+```
+
+**Example:**
+
+```bash
+npm run inspect:task -- delete 1817452000005350387
+```
+
+### Workflow Example
+
+Here's a complete workflow for understanding Zoho's code block formatting:
+
+1. **Create the task:**
+
+   ```bash
+   npm run inspect:task -- create
+   ```
+
+   Note the task ID from the output.
+
+2. **Add formatting in Zoho:**
+   - Open Zoho Projects portal
+   - Find the task
+   - Edit description
+   - Add a code block with multiple lines:
+     ```javascript
+     function hello() {
+     	console.log('Hello');
+     	return true;
+     }
+     ```
+   - Save the task
+
+3. **Inspect the HTML:**
+
+   ```bash
+   npm run inspect:task -- read 1817452000005350387
+   ```
+
+4. **Copy the HTML structure** from the output and use it in your WYSIWYG tests
+
+5. **Clean up when done:**
+   ```bash
+   npm run inspect:task -- delete 1817452000005350387
+   ```
+
+### Tips
+
+- **Preserve the HTML exactly** - Copy/paste the exact HTML structure shown in the output
+- **Test various formats** - Create multiple inspect tasks to test different HTML elements
+- **Check newlines** - Pay attention to how Zoho handles newlines in `<pre>` and `<code>` tags
+- **Compare structures** - Create tasks with similar content to see if Zoho generates consistent HTML
 
 ## Best Practices
 
