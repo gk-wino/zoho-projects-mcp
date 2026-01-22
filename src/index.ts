@@ -109,6 +109,7 @@ class ZohoProjectsServer {
 		method: string = 'GET',
 		body?: any,
 		isRetry: boolean = false,
+		contentType: string = 'application/json',
 	): Promise<any> {
 		// Check if token needs refresh (5 minutes before expiry)
 		if (Date.now() >= this.tokenExpiresAt) {
@@ -125,7 +126,7 @@ class ZohoProjectsServer {
 		const url = `${this.baseUrl}${endpoint}`;
 		const headers: Record<string, string> = {
 			'Authorization': `Zoho-oauthtoken ${this.config.accessToken}`,
-			'Content-Type': 'application/json',
+			'Content-Type': contentType,
 		};
 
 		const options: {
@@ -138,7 +139,20 @@ class ZohoProjectsServer {
 		};
 
 		if (body && (method === 'POST' || method === 'PATCH' || method === 'PUT')) {
-			options.body = JSON.stringify(body);
+			if (contentType === 'application/x-www-form-urlencoded') {
+				// Convert object to URL-encoded string
+				const params = new URLSearchParams();
+				for (const [key, value] of Object.entries(body)) {
+					if (Array.isArray(value)) {
+						params.append(key, JSON.stringify(value));
+					} else {
+						params.append(key, String(value));
+					}
+				}
+				options.body = params.toString();
+			} else {
+				options.body = JSON.stringify(body);
+			}
 		}
 
 		const response = await fetch(url, options);
@@ -158,7 +172,7 @@ class ZohoProjectsServer {
 				try {
 					await this.refreshAccessToken();
 					// Retry the request once with new token
-					return await this.makeRequest(endpoint, method, body, true);
+					return await this.makeRequest(endpoint, method, body, true, contentType);
 				} catch (refreshError) {
 					console.error('Token refresh failed:', refreshError);
 					// Fall through to throw original error
@@ -1071,6 +1085,8 @@ class ZohoProjectsServer {
 			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/associate-bugs`,
 			'POST',
 			{ bug_ids: bug_ids },
+			false,
+			'application/x-www-form-urlencoded',
 		);
 		return {
 			content: [
