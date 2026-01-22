@@ -234,15 +234,11 @@ async function testRestoreProject(client: Client, projectId: string) {
 		logTestSuccess(testName, { projectId });
 		return true;
 	} catch (error: any) {
-		// Check if it's a permission error
-		if (error.message && error.message.includes('PERMISSION_ERROR')) {
-			console.log('\n⚠️  Warning: Insufficient permissions to restore project from trash');
-			console.log('   This is likely due to API account restrictions');
-			console.log('   Test SKIPPED (not a failure)');
-			return false;
+		const shouldThrow = logTestFailure(testName, error);
+		if (shouldThrow) {
+			throw error;
 		}
-		logTestFailure(testName, error);
-		throw error;
+		return false;
 	}
 }
 
@@ -274,15 +270,11 @@ async function testDeleteProject(client: Client, projectId: string) {
 		logTestSuccess(testName, { projectId });
 		return true;
 	} catch (error: any) {
-		// Check if it's a permission error
-		if (error.message && error.message.includes('PERMISSION_ERROR')) {
-			console.log('\n⚠️  Warning: Insufficient permissions to permanently delete project');
-			console.log('   This is likely due to API account restrictions');
-			console.log('   Test SKIPPED (not a failure)');
-			return false;
+		const shouldThrow = logTestFailure(testName, error);
+		if (shouldThrow) {
+			throw error;
 		}
-		logTestFailure(testName, error);
-		throw error;
+		return false;
 	}
 }
 

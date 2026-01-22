@@ -123,9 +123,18 @@ export function logTestSuccess(testName: string, data?: any) {
 	}
 }
 
-export function logTestFailure(testName: string, error: any) {
+export function logTestFailure(testName: string, error: any): boolean {
+	// Check if it's a permission error
+	if (error.message && error.message.includes('PERMISSION_ERROR')) {
+		console.log('\n⚠️  Warning: Insufficient permissions for this operation');
+		console.log('   This is likely due to API account restrictions');
+		console.log('   Test SKIPPED (not a failure)');
+		return false; // Don't throw error
+	}
+
 	console.error(`❌ FAILED: ${testName}`);
 	console.error('Error:', error.message || error);
+	return true; // Throw error
 }
 
 // Wait for a specific amount of time
