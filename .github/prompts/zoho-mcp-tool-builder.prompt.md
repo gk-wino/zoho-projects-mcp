@@ -160,95 +160,115 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 ### Phase 4: Testing Infrastructure
 
-9. **Create or Update Smoke Test**
-   - Check if smoke test exists: `tests/smoke/{domain}.test.ts`
-   - If not, create new test file using this structure:
+9. **Determine Test Environment Requirements**
+   - Identify if the domain requires a project context:
+     - **Requires Project**: tasks, tasklists, milestones, phases, events, forums
+     - **Standalone**: portals, projects, users, teams, tags
+   - If project is required:
+     - Tests will use `initializeTestEnvironment()` to get a persistent test project
+     - Test project "Zoho Project MCP Tests" will be created/cached automatically
+     - All test functions will receive `projectId` parameter
+   - If standalone:
+     - Tests work directly with portal-level or global operations
+     - No test project initialization needed
 
-     ```typescript
-     #!/usr/bin/env node
+10. **Create or Update Smoke Test**
 
-     import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-     import {
-         loadEnv,
-         createMcpClient,
-         callTool,
-         parseToolResponse,
-         logTestStart,
-         logTestSuccess,
-         logTestFailure,
-         cleanup,
-         wait,
-     } from './utils.js';
+- Check if smoke test exists: `tests/smoke/{domain}.test.ts`
+- If not, create new test file using this structure:
 
-     async function testToolName(client: Client, requiredParams: any) {
-         const testName = 'tool_name';
-         logTestStart(testName);
+  ```typescript
+  #!/usr/bin/env node
 
-         try {
-             const response = await callTool(client, 'tool_name', {
-                 param1: requiredParams.param1,
-                 // Add parameters
-             });
-             const data = parseToolResponse(response);
+  import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+  import {
+      loadEnv,
+      createMcpClient,
+      initializeTestEnvironment,
+      callTool,
+      parseToolResponse,
+      logTestStart,
+      logTestSuccess,
+      logTestFailure,
+      cleanup,
+      wait,
+  } from './utils.js';
 
-             // Validate response structure
-             if (!data.expected_field) {
-                 throw new Error('Expected field missing in response');
-             }
+  async function testToolName(client: Client, requiredParams: any) {
+      const testName = 'tool_name';
+      logTestStart(testName);
 
-             // Log relevant information
-             console.log(`\nResult: ${data.some_field}`);
+      try {
+          const response = await callTool(client, 'tool_name', {
+              param1: requiredParams.param1,
+              // Add parameters
+          });
+          const data = parseToolResponse(response);
 
-             logTestSuccess(testName);
-             return data;
-         } catch (error) {
-             logTestFailure(testName, error);
-             throw error;
-         }
-     }
+          // Validate response structure
+          if (!data.expected_field) {
+              throw new Error('Expected field missing in response');
+          }
 
-     async function run{Domain}SmokeTests() {
-         console.log('\n🚀 Starting {Domain} Smoke Tests\n');
-         let client: Client | null = null;
+          // Log relevant information
+          console.log(`\nResult: ${data.some_field}`);
 
-         try {
-             const env = loadEnv();
-             console.log('✅ Environment loaded');
+          logTestSuccess(testName);
+          return data;
+      } catch (error) {
+          logTestFailure(testName, error);
+          throw error;
+      }
+  }
 
-             client = await createMcpClient();
-             console.log('✅ Connected to MCP server');
+  async function run{Domain}SmokeTests() {
+      console.log('\n🚀 Starting {Domain} Smoke Tests\n');
+      let client: Client | null = null;
 
-             await wait(1000);
+      try {
+          const env = loadEnv();
+          console.log('✅ Environment loaded');
 
-             // Run all test functions
-             await testToolName(client, env);
-             await wait(500);
+          client = await createMcpClient();
+          console.log('✅ Connected to MCP server');
 
-             // Summary
-             console.log('\n' + '='.repeat(60));
-             console.log('✨ All {Domain} Smoke Tests Passed!');
-             console.log('='.repeat(60));
+          await wait(1000);
 
-             await cleanup(client);
-             process.exit(0);
-         } catch (error) {
-             console.error('\n💥 Smoke Tests Failed\n', error);
-             if (client) await cleanup(client);
-             process.exit(1);
-         }
-     }
+          // Initialize test environment if domain requires a project context
+          // Use for: tasks, tasklists, milestones, phases, etc.
+          // Skip for: portals, projects, users, teams, tags
+          const testProject = await initializeTestEnvironment(client);
+          console.log();
 
-     if (import.meta.url === `file://${process.argv[1]}`) {
-         run{Domain}SmokeTests().catch((error) => {
-             console.error('Fatal error:', error);
-             process.exit(1);
-         });
-     }
+          // Run all test functions, passing testProject where needed
+          await testToolName(client, testProject.projectId);
+          await wait(500);
 
-     export { run{Domain}SmokeTests };
-     ```
+          // Summary
+          console.log('\n' + '='.repeat(60));
+          console.log('✨ All {Domain} Smoke Tests Passed!');
+          console.log('='.repeat(60));
 
-10. **Update package.json**
+          await cleanup(client);
+          process.exit(0);
+      } catch (error) {
+          console.error('\n💥 Smoke Tests Failed\n', error);
+          if (client) await cleanup(client);
+          process.exit(1);
+      }
+  }
+
+  if (import.meta.url === `file://${process.argv[1]}`) {
+      run{Domain}SmokeTests().catch((error) => {
+          console.error('Fatal error:', error);
+          process.exit(1);
+      });
+  }
+
+  export { run{Domain}SmokeTests };
+  ```
+
+11. **Update package.json**
     - Read `package.json`
     - Check if test script exists: `test:smoke:{domain}`
     - If missing, add:
@@ -259,12 +279,12 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 ### Phase 5: Validation & Iteration
 
-11. **Initial Test Run**
+12. **Initial Test Run**
     - Build the project: `npm run build`
     - Run the smoke test: `npm run test:smoke:{domain}`
     - Capture the output and any errors
 
-12. **Iterative Debugging**
+13. **Iterative Debugging**
     - **Use the `todo` tool to track** each failing test and required fixes
     - If test fails, analyze the error:
       - **Schema validation error**: Update schema definitions
@@ -278,7 +298,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
     - Rebuild and rerun test
     - Repeat until all tests pass
 
-13. **Response Validation**
+14. **Response Validation**
     - Ensure tests validate:
       - Response structure matches documentation
       - Required fields are present
@@ -289,7 +309,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 ### Phase 6: Documentation
 
-14. **Update Smoke Test README**
+15. **Update Smoke Test README**
     - Read `tests/smoke/README.md`
     - Add new section for the domain if it doesn't exist:
 
@@ -328,7 +348,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
     - Include expected output examples
 
-15. **Final Verification**
+16. **Final Verification**
     - Run complete test suite: `npm run test:smoke:{domain}`
     - Verify all tests pass
     - Check that output is clear and informative
@@ -336,7 +356,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 ### Phase 7: Summary Report
 
-16. **Provide Implementation Summary**
+17. **Provide Implementation Summary**
     - Present a final report to the user:
 
       ```
@@ -384,6 +404,8 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 - Create one test function per tool
 - Use descriptive test names matching tool names
+- Use `initializeTestEnvironment()` for domains requiring project context (tasks, tasklists, milestones, phases, etc.)
+- Pass `projectId` to test functions when needed instead of hardcoding
 - Validate response structure thoroughly
 - Log meaningful information that confirms functionality
 - Handle errors gracefully with clear messages

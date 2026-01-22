@@ -35,7 +35,20 @@ The utilities module provides reusable functions for smoke testing:
 
 - **`logTestStart(testName)`** - Logs the start of a test
 - **`logTestSuccess(testName, data?)`** - Logs successful test completion
-- **`logTestFailure(testName, error)`** - Logs test failure
+- **`logTestFailure(testName, error)`** - Logs test failure with special handling for permission errors (returns boolean indicating whether to throw)
+
+### Test Environment
+
+- **`initializeTestEnvironment(client)`** - Initializes test environment with a persistent test project
+  - Searches for "Zoho Project MCP Tests" project
+  - Creates it if it doesn't exist
+  - Caches project details to `.test-project-cache.json` for faster subsequent runs
+  - Returns project details: `{ projectId, projectName, projectKey }`
+  - Example usage:
+    ```typescript
+    const testProject = await initializeTestEnvironment(client);
+    // Use testProject.projectId for testing task lists, tasks, etc.
+    ```
 
 ### Helpers
 
