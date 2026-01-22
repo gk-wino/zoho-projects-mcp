@@ -140,9 +140,7 @@ export async function initializeTestEnvironment(client: Client): Promise<{
 		const projects = parseToolResponse(response);
 
 		if (Array.isArray(projects)) {
-			const testProject = projects.find(
-				(project: any) => project.name === testProjectName,
-			);
+			const testProject = projects.find((project: any) => project.name === testProjectName);
 
 			if (testProject) {
 				console.log(`✅ Found existing test project (ID: ${testProject.id})`);
@@ -175,7 +173,16 @@ export async function initializeTestEnvironment(client: Client): Promise<{
 		is_public_project: false,
 	});
 
-	const createdProject = parseToolResponse(createResponse);
+	let createdProject = parseToolResponse(createResponse);
+
+	// Handle wrapped response (JSON inside success message string)
+	if (typeof createdProject === 'string') {
+		const jsonMatch = createdProject.match(/\{[\s\S]*\}/);
+		if (jsonMatch) {
+			createdProject = JSON.parse(jsonMatch[0]);
+		}
+	}
+
 	console.log(`✅ Created test project (ID: ${createdProject.id})`);
 
 	const projectData = {
