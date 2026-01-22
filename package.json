@@ -15,6 +15,7 @@
         "dev:http": "tsc --watch & node --watch dist/http-server.js",
         "test": "node test-connection.js",
         "test:smoke": "npm run build && npx tsx tests/smoke/portal.test.ts",
+        "test:smoke:phase": "npm run build && npx tsx tests/smoke/phase.test.ts",
         "test:smoke:portal": "npm run build && npx tsx tests/smoke/portal.test.ts",
         "test:smoke:project": "npm run build && npx tsx tests/smoke/project.test.ts",
         "setup": "bash setup.sh"

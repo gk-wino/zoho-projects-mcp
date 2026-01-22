@@ -191,14 +191,40 @@ class ZohoProjectsServer {
 						);
 
 					// Phase operations
+					case 'get_phases':
+						return await this.handlers.phases.getPhases(params);
 					case 'list_phases':
-						return await this.handlers.phases.listPhases(
-							params.project_id,
-							params.page,
-							params.per_page,
-						);
+						return await this.handlers.phases.listPhases(params);
+					case 'get_phase_detail':
+						return await this.handlers.phases.getPhaseDetail(params);
 					case 'create_phase':
 						return await this.handlers.phases.createPhase(params);
+					case 'update_phase':
+						return await this.handlers.phases.updatePhase(params);
+					case 'delete_phase':
+						return await this.handlers.phases.deletePhase(params);
+					case 'move_phase':
+						return await this.handlers.phases.movePhase(params);
+					case 'clone_phase':
+						return await this.handlers.phases.clonePhase(params);
+					case 'get_phase_activities':
+						return await this.handlers.phases.getPhaseActivities(params);
+					case 'get_phase_status_transition':
+						return await this.handlers.phases.getPhaseStatusTransition(params);
+					case 'get_phase_followers':
+						return await this.handlers.phases.getPhaseFollowers(params);
+					case 'add_phase_followers':
+						return await this.handlers.phases.addPhaseFollowers(params);
+					case 'remove_phase_followers':
+						return await this.handlers.phases.removePhaseFollowers(params);
+					case 'get_phase_comments':
+						return await this.handlers.phases.getPhaseComments(params);
+					case 'add_phase_comment':
+						return await this.handlers.phases.addPhaseComment(params);
+					case 'update_phase_comment':
+						return await this.handlers.phases.updatePhaseComment(params);
+					case 'delete_phase_comment':
+						return await this.handlers.phases.deletePhaseComment(params);
 
 					// Search
 					case 'search':
