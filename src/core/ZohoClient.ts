@@ -139,6 +139,12 @@ export class ZohoClient {
 
 			// Update access token and expiration time
 			this.config.accessToken = data.access_token;
+
+			// Optionally log the new access token for debugging
+			if (this.config.printTokenOnRefresh) {
+				console.error('New Access Token:', data.access_token);
+			}
+
 			// Set expiration to 5 minutes before actual expiry for safety margin
 			this.tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
 

@@ -1,4 +1,5 @@
 export interface ZohoConfig {
+	printTokenOnRefresh: boolean;
 	accessToken: string;
 	portalId: string;
 	apiDomain?: string;

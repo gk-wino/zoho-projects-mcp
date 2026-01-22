@@ -97,7 +97,6 @@ class ZohoProjectsServer {
 
 			// Update access token and expiration time
 			this.config.accessToken = data.access_token;
-			console.log('New Access Token:', this.config.accessToken);
 			// Set expiration to 5 minutes before actual expiry for safety margin
 			this.tokenExpiresAt = Date.now() + (data.expires_in - 300) * 1000;
 

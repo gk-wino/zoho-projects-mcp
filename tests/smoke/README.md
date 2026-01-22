@@ -39,7 +39,7 @@ The utilities module provides reusable functions for smoke testing:
 ### Helpers
 
 - **`wait(ms)`** - Async wait/delay function
-- **`cleanup(client)`** - Gracefully closes MCP client connection
+- **`cleanup(client)`** - Gracefully closes MCP client connection and terminates server process
 
 ## Running Smoke Tests
 
@@ -64,15 +64,15 @@ The utilities module provides reusable functions for smoke testing:
 ### Run Portal Tests
 
 ```bash
-# Using Node directly
-node tests/smoke/portal.test.js
+# Using npm script (recommended)
+npm run test:smoke:portal
 
-# Or make it executable
-chmod +x tests/smoke/portal.test.js
-./tests/smoke/portal.test.js
-
-# Using tsx for TypeScript
+# Or using tsx directly
 npx tsx tests/smoke/portal.test.ts
+
+# Or make it executable and run
+chmod +x tests/smoke/portal.test.ts
+./tests/smoke/portal.test.ts
 ```
 
 ## Portal Smoke Tests
@@ -104,11 +104,14 @@ Tests in `portal.test.ts`:
 🔨 Ensuring project is built...
 
 🔌 Connecting to MCP server...
+Zoho Projects MCP server running on stdio
 ✅ Connected to MCP server
 
 ============================================================
 🧪 TEST: list_portals
 ============================================================
+Received 401 error, attempting token refresh...
+Access token refreshed successfully. Expires in 3600 seconds.
 
 Found 1 portal(s):
   1. Your Portal Name (ID: 753397720)
@@ -121,14 +124,19 @@ Found 1 portal(s):
 
 Portal Details:
   Name: Your Portal Name
+  Organization: Your Organization
   ID: 753397720
-  Owner: Your Name
-  Role: admin
-  Created: 2024-01-15
+  Owner: your.name
   Timezone: America/Los_Angeles
+  Plan: Enterprise
+  Time Format: hh:mm aaa
   Date Format: MM/dd/yyyy
-
+  Business Hours: 08:00 - 17:30
 ✅ PASSED: get_portal
+Response: {
+  "portalId": 753397720,
+  "name": "Your Portal Name"
+}
 
 ============================================================
 ✨ All Portal Smoke Tests Passed!
@@ -140,6 +148,7 @@ Portal Details:
    Failed: 0
    Portal Validated: 753397720
 
+🧹 Cleaning up...
 ✨ Cleanup completed
 ```
 
@@ -183,14 +192,28 @@ To add smoke tests for other domains (tasks, issues, etc.):
    }
 
    async function runTaskSmokeTests() {
-   	const env = loadEnv();
-   	const client = await createMcpClient();
+   	let client: Client | null = null;
 
    	try {
+   		const env = loadEnv();
+   		client = await createMcpClient();
+
    		await testCreateTask(client, env.portalId);
    		// Add more tests...
-   	} finally {
-   		await cleanup(client);
+
+   		// Cleanup and exit successfully
+   		if (client) {
+   			await cleanup(client);
+   		}
+   		process.exit(0);
+   	} catch (error) {
+   		console.error('Tests failed:', error);
+
+   		// Cleanup and exit with error
+   		if (client) {
+   			await cleanup(client);
+   		}
+   		process.exit(1);
    	}
    }
    ```
@@ -202,12 +225,13 @@ To add smoke tests for other domains (tasks, issues, etc.):
 
 ## Best Practices
 
-1. **Always cleanup** - Use try/finally to ensure client cleanup
-2. **Validate responses** - Check response structure and data
-3. **Use real data** - Tests should use actual API credentials
-4. **Add delays** - Use `wait()` between tests to avoid rate limits
-5. **Log clearly** - Use provided logging functions for consistent output
-6. **Handle errors** - Catch and log errors with context
+1. **Always cleanup** - Call `cleanup(client)` in both success and error paths before exit
+2. **Explicit exit** - Call `process.exit(0)` for success or `process.exit(1)` for failures to ensure clean termination
+3. **Validate responses** - Check response structure and data
+4. **Use real data** - Tests should use actual API credentials
+5. **Add delays** - Use `wait()` between tests to avoid rate limits
+6. **Log clearly** - Use provided logging functions for consistent output
+7. **Handle errors** - Catch and log errors with context
 
 ## Troubleshooting
 
@@ -224,7 +248,8 @@ To add smoke tests for other domains (tasks, issues, etc.):
 ### "Error connecting to MCP server"
 
 - Ensure project is built (`npm run build`)
-- Check that `build/index.js` exists
+- Check that `dist/index.js` exists
+- Verify no TypeScript compilation errors
 
 ### "401 Unauthorized" errors
 

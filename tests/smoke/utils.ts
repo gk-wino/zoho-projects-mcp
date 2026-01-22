@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { spawn } from 'child_process';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,8 +7,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Store server process for cleanup
-let serverProcess: any = null;
+// Store transport for cleanup
+let serverTransport: StdioClientTransport | null = null;
 
 // Load environment variables from .env file
 export function loadEnv() {
@@ -53,11 +52,11 @@ export async function createMcpClient(): Promise<Client> {
 	const transport = new StdioClientTransport({
 		command: 'node',
 		args: [serverPath],
-		env: process.env,
+		env: process.env as Record<string, string>,
 	});
 
-	// Store reference to the underlying process for cleanup
-	serverProcess = (transport as any).process;
+	// Store reference to transport for cleanup
+	serverTransport = transport;
 
 	// Create MCP client
 	const client = new Client(
@@ -139,19 +138,13 @@ export async function cleanup(client: Client) {
 	try {
 		console.log('\n🧹 Cleaning up...');
 
-		// Close the client connection
+		// Close the client connection first
 		await client.close();
 
-		// Kill the server process if it exists
-		if (serverProcess && !serverProcess.killed) {
-			serverProcess.kill('SIGTERM');
-
-			// Force kill if it doesn't exit in 2 seconds
-			setTimeout(() => {
-				if (!serverProcess.killed) {
-					serverProcess.kill('SIGKILL');
-				}
-			}, 2000);
+		// Close the transport to terminate the server process
+		if (serverTransport) {
+			await serverTransport.close();
+			serverTransport = null;
 		}
 
 		console.log('✨ Cleanup completed');
