@@ -413,6 +413,97 @@ class ZohoProjectsServer {
 						required: ['project_id', 'task_id'],
 					},
 				},
+				{
+					name: 'move_task',
+					description:
+						'Move a task to a different task list within the same project. This requires the target task list ID and optional status mapping.',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID to move (obtain from list_tasks or get_task)',
+							},
+							target_tasklist_id: {
+								type: 'string',
+								description:
+									'Target task list ID where task will be moved (obtain from list_tasklists)',
+							},
+						},
+						required: ['project_id', 'task_id', 'target_tasklist_id'],
+					},
+				},
+				{
+					name: 'get_associated_bugs',
+					description: 'Get all bugs/issues associated with a specific task',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+						},
+						required: ['project_id', 'task_id'],
+					},
+				},
+				{
+					name: 'associate_bugs',
+					description:
+						'Associate one or more bugs/issues with a task. This creates a link between the task and the specified bugs.',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							bug_ids: {
+								type: 'array',
+								items: { type: 'string' },
+								description:
+									'Array of bug/issue IDs to associate with the task (obtain from list_issues)',
+							},
+						},
+						required: ['project_id', 'task_id', 'bug_ids'],
+					},
+				},
+				{
+					name: 'disassociate_bug',
+					description:
+						'Remove the association between a task and a bug/issue. This breaks the link but does not delete the bug.',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							bug_id: {
+								type: 'string',
+								description:
+									'Bug/Issue ID to disassociate from the task (obtain from get_associated_bugs)',
+							},
+						},
+						required: ['project_id', 'task_id', 'bug_id'],
+					},
+				},
 
 				// Issue operations
 				{
@@ -708,6 +799,14 @@ class ZohoProjectsServer {
 						return await this.updateTask(params);
 					case 'delete_task':
 						return await this.deleteTask(params.project_id, params.task_id);
+					case 'move_task':
+						return await this.moveTask(params);
+					case 'get_associated_bugs':
+						return await this.getAssociatedBugs(params.project_id, params.task_id);
+					case 'associate_bugs':
+						return await this.associateBugs(params);
+					case 'disassociate_bug':
+						return await this.disassociateBug(params.project_id, params.task_id, params.bug_id);
 
 					// Issue operations
 					case 'list_issues':
@@ -930,6 +1029,69 @@ class ZohoProjectsServer {
 				{
 					type: 'text',
 					text: `Task deleted successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async moveTask(params: any) {
+		const { project_id, task_id, target_tasklist_id } = params;
+		const requestBody: any = {
+			target_tasklist_id: target_tasklist_id,
+		};
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/move`,
+			'POST',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Task moved successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async getAssociatedBugs(projectId: string, taskId: string) {
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/associated-bugs`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async associateBugs(params: any) {
+		const { project_id, task_id, bug_ids } = params;
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/associate-bugs`,
+			'POST',
+			{ bug_ids: bug_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Bugs associated successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async disassociateBug(projectId: string, taskId: string, bugId: string) {
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/bug/${bugId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Bug disassociated successfully:\n${JSON.stringify(data, null, 2)}`,
 				},
 			],
 		};
