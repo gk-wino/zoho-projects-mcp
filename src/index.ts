@@ -519,6 +519,120 @@ class ZohoProjectsServer {
 					},
 				},
 
+				// Task Comments operations
+				{
+					name: 'list_task_comments',
+					description: 'Get all comments for a specific task',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							page: {
+								type: 'number',
+								description: 'Page number for pagination',
+								default: 1,
+							},
+							per_page: {
+								type: 'number',
+								description: 'Number of comments per page',
+								default: 10,
+							},
+							sort_by: {
+								type: 'string',
+								description: 'Sort order for comments (e.g., "created_time" or "modified_time")',
+							},
+						},
+						required: ['project_id', 'task_id'],
+					},
+				},
+				{
+					name: 'add_task_comment',
+					description: 'Add a new comment to a task',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							comment: {
+								type: 'string',
+								description: 'The comment text/content to add',
+							},
+							attachments: {
+								type: 'array',
+								items: { type: 'string' },
+								description: 'Optional array of attachment IDs',
+							},
+						},
+						required: ['project_id', 'task_id', 'comment'],
+					},
+				},
+				{
+					name: 'update_task_comment',
+					description: 'Update an existing task comment',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							comment_id: {
+								type: 'string',
+								description: 'Comment ID to update (obtain from list_task_comments)',
+							},
+							comment: {
+								type: 'string',
+								description: 'The updated comment text/content',
+							},
+							attachments: {
+								type: 'array',
+								items: { type: 'string' },
+								description: 'Optional array of attachment IDs',
+							},
+						},
+						required: ['project_id', 'task_id', 'comment_id', 'comment'],
+					},
+				},
+				{
+					name: 'delete_task_comment',
+					description: 'Delete a task comment',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: {
+								type: 'string',
+								description: 'Project ID (obtain from list_projects)',
+							},
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							comment_id: {
+								type: 'string',
+								description: 'Comment ID to delete (obtain from list_task_comments)',
+							},
+						},
+						required: ['project_id', 'task_id', 'comment_id'],
+					},
+				},
+
 				// Issue operations
 				{
 					name: 'list_issues',
@@ -822,6 +936,26 @@ class ZohoProjectsServer {
 					case 'disassociate_bug':
 						return await this.disassociateBug(params.project_id, params.task_id, params.bug_id);
 
+					// Task Comments operations
+					case 'list_task_comments':
+						return await this.listTaskComments(
+							params.project_id,
+							params.task_id,
+							params.page,
+							params.per_page,
+							params.sort_by,
+						);
+					case 'add_task_comment':
+						return await this.addTaskComment(params);
+					case 'update_task_comment':
+						return await this.updateTaskComment(params);
+					case 'delete_task_comment':
+						return await this.deleteTaskComment(
+							params.project_id,
+							params.task_id,
+							params.comment_id,
+						);
+
 					// Issue operations
 					case 'list_issues':
 						return await this.listIssues(params.project_id, params.page, params.per_page);
@@ -1108,6 +1242,91 @@ class ZohoProjectsServer {
 				{
 					type: 'text',
 					text: `Bug disassociated successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	// Task Comments operations
+	private async listTaskComments(
+		projectId: string,
+		taskId: string,
+		page: number = 1,
+		perPage: number = 10,
+		sortBy?: string,
+	) {
+		let endpoint = `/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/comments?page=${page}&per_page=${perPage}`;
+		if (sortBy) {
+			endpoint += `&sort_by=${encodeURIComponent(sortBy)}`;
+		}
+		const data = await this.makeRequest(endpoint);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	private async addTaskComment(params: any) {
+		const { project_id, task_id, comment, attachments } = params;
+
+		const requestBody: any = {
+			comment: comment,
+		};
+
+		if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+			requestBody.attachments = attachments;
+		}
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/comments`,
+			'POST',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Comment added successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async updateTaskComment(params: any) {
+		const { project_id, task_id, comment_id, comment, attachments } = params;
+
+		const requestBody: any = {
+			comment: comment,
+		};
+
+		if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+			requestBody.attachments = attachments;
+		}
+
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}/comments/${comment_id}`,
+			'PATCH',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Comment updated successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async deleteTaskComment(projectId: string, taskId: string, commentId: string) {
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/tasks/${taskId}/comments/${commentId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Comment deleted successfully:\n${JSON.stringify(data, null, 2)}`,
 				},
 			],
 		};
