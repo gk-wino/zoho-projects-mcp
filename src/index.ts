@@ -324,26 +324,37 @@ class ZohoProjectsServer {
 				},
 				{
 					name: 'create_task',
-					description: 'Create a new task in a project',
+					description:
+						'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists.',
 					inputSchema: {
 						type: 'object',
 						properties: {
-							project_id: { type: 'string', description: 'Project ID' },
-							name: { type: 'string', description: 'Task name' },
-							description: { type: 'string', description: 'Task description' },
+							project_id: { type: 'string', description: 'Project ID (obtain from list_projects)' },
+							tasklist_id: {
+								type: 'string',
+								description:
+									'Task list ID (optional - uses general/default task list if not provided. Get from list_tasklists)',
+							},
+							name: { type: 'string', description: 'Task name (required)' },
+							description: { type: 'string', description: 'Task description (optional)' },
 							priority: {
 								type: 'string',
-								description: 'Task priority',
+								description: 'Task priority (optional)',
 								enum: ['none', 'low', 'medium', 'high'],
 							},
 							start_date: {
 								type: 'string',
-								description: 'Start date (YYYY-MM-DD)',
+								description:
+									'Start date in ISO 8601 format (e.g., 2026-01-27T08:00:00Z or 2026-01-27T08:00:00.000Z)',
 							},
-							end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+							end_date: {
+								type: 'string',
+								description:
+									'End date in ISO 8601 format (e.g., 2026-02-05T17:00:00Z or 2026-02-05T17:00:00.000Z)',
+							},
 							assignee_zpuid: {
 								type: 'string',
-								description: 'Assignee user ZPUID',
+								description: 'Assignee user ZPUID (optional - get from list_users)',
 							},
 						},
 						required: ['project_id', 'name'],
@@ -351,24 +362,41 @@ class ZohoProjectsServer {
 				},
 				{
 					name: 'update_task',
-					description: 'Update a task',
+					description:
+						'Update a task properties. You can also move a task to a different task list by providing tasklist_id.',
 					inputSchema: {
 						type: 'object',
 						properties: {
 							project_id: { type: 'string', description: 'Project ID' },
-							task_id: { type: 'string', description: 'Task ID' },
-							name: { type: 'string', description: 'Task name' },
-							description: { type: 'string', description: 'Task description' },
+							task_id: {
+								type: 'string',
+								description: 'Task ID (obtain from list_tasks or get_task)',
+							},
+							tasklist_id: {
+								type: 'string',
+								description:
+									'Task list ID (optional - only provide if moving task to different task list. Get from list_tasklists)',
+							},
+							name: { type: 'string', description: 'Task name (optional - only if updating)' },
+							description: {
+								type: 'string',
+								description: 'Task description (optional - only if updating)',
+							},
 							priority: {
 								type: 'string',
-								description: 'Task priority',
+								description: 'Task priority (optional - only if updating)',
 								enum: ['none', 'low', 'medium', 'high'],
 							},
 							start_date: {
 								type: 'string',
-								description: 'Start date (YYYY-MM-DD)',
+								description:
+									'Start date in ISO 8601 format (e.g., 2026-01-27T08:00:00Z or 2026-01-27T08:00:00.000Z)',
 							},
-							end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+							end_date: {
+								type: 'string',
+								description:
+									'End date in ISO 8601 format (e.g., 2026-02-05T17:00:00Z or 2026-02-05T17:00:00.000Z)',
+							},
 						},
 						required: ['project_id', 'task_id'],
 					},
@@ -826,11 +854,33 @@ class ZohoProjectsServer {
 	}
 
 	private async createTask(params: any) {
-		const { project_id, ...taskData } = params;
+		const { project_id, tasklist_id, assignee_zpuid, ...taskData } = params;
+
+		// Build task data according to API spec
+		const requestBody: any = {
+			...taskData,
+		};
+
+		// Add tasklist if provided, otherwise API will use general tasklist
+		if (tasklist_id) {
+			requestBody.tasklist = { id: tasklist_id };
+		}
+
+		// Add owners_and_work if assignee is provided
+		if (assignee_zpuid) {
+			requestBody.owners_and_work = {
+				owners: [
+					{
+						zpuid: assignee_zpuid,
+					},
+				],
+			};
+		}
+
 		const data = await this.makeRequest(
 			`/portal/${this.config.portalId}/projects/${project_id}/tasks`,
 			'POST',
-			taskData,
+			requestBody,
 		);
 		return {
 			content: [
@@ -843,11 +893,22 @@ class ZohoProjectsServer {
 	}
 
 	private async updateTask(params: any) {
-		const { project_id, task_id, ...taskData } = params;
+		const { project_id, task_id, tasklist_id, ...taskData } = params;
+
+		// Build task data according to API spec
+		const requestBody: any = {
+			...taskData,
+		};
+
+		// Add tasklist if provided (for moving task to different task list)
+		if (tasklist_id) {
+			requestBody.tasklist = { id: tasklist_id };
+		}
+
 		const data = await this.makeRequest(
 			`/portal/${this.config.portalId}/projects/${project_id}/tasks/${task_id}`,
 			'PATCH',
-			taskData,
+			requestBody,
 		);
 		return {
 			content: [
