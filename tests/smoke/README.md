@@ -986,6 +986,8 @@ To read a task, run: npm run inspect:task -- read <task_id>
 
 #### 5. Delete a Test Task
 
+Delete a specific INSPECT task by ID:
+
 ```bash
 npm run inspect:task -- delete <task_id>
 ```
@@ -994,6 +996,52 @@ npm run inspect:task -- delete <task_id>
 
 ```bash
 npm run inspect:task -- delete 1817452000005350387
+```
+
+**Example output:**
+
+```
+📖 Verifying task 1817452000005350387 exists...
+
+Task found: INSPECT-1769122811580 - Manual Edit Task
+🗑️  Deleting task 1817452000005350387...
+
+✅ Task deleted successfully!
+```
+
+#### 6. Delete All INSPECT Tasks
+
+Clean up all INSPECT tasks at once:
+
+```bash
+npm run inspect:task -- delete-all
+```
+
+This will:
+
+- Find all tasks with names containing "INSPECT-" or "Manual Edit Task"
+- Display the list of tasks to be deleted
+- Delete each task with rate limiting
+- Show a summary of deleted and failed tasks
+
+**Example output:**
+
+```
+🗑️  Finding all INSPECT tasks...
+
+Found 3 INSPECT task(s) to delete:
+
+1. INSPECT-1769122811580 - Manual Edit Task (ID: 1817452000005350387)
+2. INSPECT-1769122999999 - Manual Edit Task (ID: 1817452000005350999)
+3. INSPECT-1769123111111 - Manual Edit Task (ID: 1817452000005351111)
+
+🗑️  Deleting tasks...
+
+✅ Deleted: INSPECT-1769122811580 - Manual Edit Task
+✅ Deleted: INSPECT-1769122999999 - Manual Edit Task
+✅ Deleted: INSPECT-1769123111111 - Manual Edit Task
+
+📊 Summary: 3 deleted, 0 failed
 ```
 
 ### Workflow Example
@@ -1030,16 +1078,33 @@ Here's a complete workflow for understanding Zoho's code block formatting:
 4. **Copy the HTML structure** from the output and use it in your WYSIWYG tests
 
 5. **Clean up when done:**
+
    ```bash
+   # Delete a specific task
    npm run inspect:task -- delete 1817452000005350387
+
+   # Or delete all INSPECT tasks at once
+   npm run inspect:task -- delete-all
    ```
+
+### Available Commands
+
+```bash
+npm run inspect:task -- create           # Create a new INSPECT task
+npm run inspect:task -- read <task_id>   # Read task HTML content
+npm run inspect:task -- list             # List all INSPECT tasks
+npm run inspect:task -- delete <task_id> # Delete a specific task
+npm run inspect:task -- delete-all       # Delete all INSPECT tasks
+```
 
 ### Tips
 
 - **Preserve the HTML exactly** - Copy/paste the exact HTML structure shown in the output
-- **Test various formats** - Create multiple inspect tasks to test different HTML elements
+- **Test various formats** - Create multiple inspect tasks to test different HTML elements (code blocks, tables, links, images)
 - **Check newlines** - Pay attention to how Zoho handles newlines in `<pre>` and `<code>` tags
 - **Compare structures** - Create tasks with similar content to see if Zoho generates consistent HTML
+- **Clean up regularly** - Use `delete-all` command to remove old INSPECT tasks and keep your project tidy
+- **Verify before delete** - The delete command verifies the task exists before attempting deletion
 
 ## Best Practices
 
