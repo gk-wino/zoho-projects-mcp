@@ -103,6 +103,10 @@ class ZohoProjectsServer {
 						return await this.handlers.projects.createProject(params);
 					case 'update_project':
 						return await this.handlers.projects.updateProject(params);
+					case 'trash_project':
+						return await this.handlers.projects.trashProject(params.project_id);
+					case 'restore_project':
+						return await this.handlers.projects.restoreProject(params.project_id);
 					case 'delete_project':
 						return await this.handlers.projects.deleteProject(params.project_id);
 
@@ -124,10 +128,7 @@ class ZohoProjectsServer {
 					case 'move_task':
 						return await this.handlers.tasks.moveTask(params);
 					case 'get_associated_bugs':
-						return await this.handlers.tasks.getAssociatedBugs(
-							params.project_id,
-							params.task_id,
-						);
+						return await this.handlers.tasks.getAssociatedBugs(params.project_id, params.task_id);
 					case 'associate_bugs':
 						return await this.handlers.tasks.associateBugs(params);
 					case 'disassociate_bug':
@@ -213,10 +214,7 @@ class ZohoProjectsServer {
 							params.per_page,
 						);
 					case 'get_tasklist':
-						return await this.handlers.tasklists.getTaskList(
-							params.project_id,
-							params.tasklist_id,
-						);
+						return await this.handlers.tasklists.getTaskList(params.project_id, params.tasklist_id);
 					case 'create_tasklist':
 						return await this.handlers.tasklists.createTaskList(params);
 					case 'update_tasklist':

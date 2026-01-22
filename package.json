@@ -16,6 +16,7 @@
         "test": "node test-connection.js",
         "test:smoke": "npm run build && npx tsx tests/smoke/portal.test.ts",
         "test:smoke:portal": "npm run build && npx tsx tests/smoke/portal.test.ts",
+        "test:smoke:project": "npm run build && npx tsx tests/smoke/project.test.ts",
         "setup": "bash setup.sh"
     },
     "keywords": [

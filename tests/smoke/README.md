@@ -8,6 +8,7 @@ Smoke tests verify that the basic functionality of the Zoho Projects MCP server 
 tests/smoke/
 ├── utils.ts          # Common utilities for all smoke tests
 ├── portal.test.ts    # Portal functionality tests
+├── project.test.ts   # Project functionality tests
 └── README.md         # This file
 ```
 
@@ -92,6 +93,124 @@ Tests in `portal.test.ts`:
 - Validates response structure
 - Verifies portal ID matches requested ID
 - Logs detailed portal information (name, owner, settings, etc.)
+
+## Project Smoke Tests
+
+Tests in `project.test.ts`:
+
+### 1. List Projects (`list_projects`)
+
+- Calls the `list_projects` tool with pagination
+- Validates response is an array of projects
+- Logs first 5 projects with names, IDs, and statuses
+
+### 2. Create Project (`create_project`)
+
+- Creates a new test project with:
+  - Unique timestamped name
+  - Description
+  - Start and end dates
+  - Project type (active)
+  - Public/private flag
+- Validates project creation response
+- Stores project ID for subsequent tests
+- Logs created project details
+
+### 3. Get Project (`get_project`)
+
+- Retrieves details of the created project
+- Validates project ID matches
+- Logs comprehensive project information:
+  - Basic details (name, type, description)
+  - Status and timestamps
+  - Owner information
+  - Budget configuration
+  - Task and issue counts
+
+### 4. Update Project (`update_project`)
+
+- Updates the test project with:
+  - New description
+  - Modified end date
+- Validates response structure
+- Logs update confirmation
+
+### 5. Trash Project (`trash_project`)
+
+- Moves project to trash (soft delete)
+- Validates success response
+- Project can be restored within 30 days
+- Logs trash operation
+
+### 6. Restore Project (`restore_project`)
+
+- Attempts to restore project from trash
+- May be skipped if user lacks permissions
+- Validates restoration on success
+- Logs result or skip reason
+
+### 7. Delete Project (`delete_project`)
+
+- Permanently deletes project from trash
+- May be skipped if user lacks permissions
+- Validates permanent deletion on success
+- Cannot be undone
+- Logs result or skip reason
+
+### Run Project Tests
+
+```bash
+npm run test:smoke:project
+```
+
+### Expected Output (Project Tests)
+
+```
+🚀 Starting Project Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+
+============================================================
+🧪 TEST: list_projects
+============================================================
+
+Found 10 project(s):
+  1. Test Project (ID: 123456789) - Status: active
+  2. Another Project (ID: 987654321) - Status: active
+  ...
+
+✅ PASSED: list_projects
+
+============================================================
+🧪 TEST: create_project
+============================================================
+
+Project Created:
+  Name: Test Project 1234567890
+  ID: 111222333
+  Type: active
+  Status: Active
+  Start Date: 2025-01-01
+  End Date: 2025-12-31
+
+✅ PASSED: create_project
+
+... (remaining test outputs)
+
+============================================================
+✨ Project Smoke Tests Summary
+============================================================
+
+Tests completed:
+  ✅ list_projects
+  ✅ create_project
+  ✅ get_project
+  ✅ update_project
+  ✅ trash_project
+  ⏭️  restore_project (skipped - permissions)
+  ⏭️  delete_project (skipped - permissions)
+```
 
 ## Expected Output
 
