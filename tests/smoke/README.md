@@ -219,6 +219,146 @@ Tests completed:
   ⏭️  delete_project (skipped - permissions)
 ```
 
+## Phase Smoke Tests
+
+Tests in `phase.test.ts`:
+
+### 1. Get Phases (`get_phases`)
+
+- Calls the `get_phases` tool to retrieve all phases across the portal
+- Validates response contains milestones array
+- Logs count of phases found across portal
+
+### 2. List Phases (`list_phases`)
+
+- Calls the `list_phases` tool for a specific project
+- Validates response structure
+- Logs phases found in the test project
+
+### 3. Create Phase (`create_phase`)
+
+- Creates a new test phase with:
+  - Unique timestamped name
+  - Internal flag
+- Validates phase creation response
+- Stores phase ID for subsequent tests
+- Logs created phase details
+
+### 4. Get Phase Detail (`get_phase_detail`)
+
+- Retrieves detailed information about the created phase
+- Validates phase ID matches
+- Logs comprehensive phase information:
+  - Basic details (name, ID, status)
+  - Owner information
+  - Created/updated timestamps
+  - Start and end dates
+  - Completion percentage
+  - Flag type
+
+### 5. Update Phase (`update_phase`)
+
+- Updates the test phase name
+- Validates response structure
+- Logs update confirmation
+
+### 6. Add Phase Comment (`add_phase_comment`)
+
+- Adds a test comment to the phase
+- Validates comment creation
+- Stores comment ID for cleanup
+- Logs comment details
+
+### 7. Get Phase Comments (`get_phase_comments`)
+
+- Retrieves all comments on the phase
+- Validates response structure
+- Logs comment retrieval
+
+### 8. Get Phase Activities (`get_phase_activities`)
+
+- Retrieves activity history of the phase
+- Validates response structure
+- Logs recent activities (create, update events)
+
+### 9. Get Phase Status Transition (`get_phase_status_transition`)
+
+- Retrieves status transition history
+- Validates response structure
+- Logs status changes
+
+### 10. Get Phase Followers (`get_phase_followers`)
+
+- Retrieves followers of the phase
+- Validates response structure
+- Logs follower count
+
+### 11. Clone Phase (`clone_phase`)
+
+- Clones the test phase within the same project
+- Validates cloned phase creation
+- Logs new phase ID
+
+### 12. Delete Phase Comment (`delete_phase_comment`)
+
+- Deletes the test comment created earlier
+- Validates successful deletion
+- Logs deletion confirmation
+
+### 13. Delete Phase (`delete_phase`)
+
+- Deletes the test phase
+- Validates successful deletion
+- Logs deletion confirmation
+
+### Run Phase Tests
+
+```bash
+npm run test:smoke:phase
+```
+
+### Expected Output (Phase Tests)
+
+```
+🚀 Starting Phase Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+✅ Using cached test project: Zoho Project MCP Tests (ID: 1234567890)
+
+============================================================
+🧪 TEST: get_phases
+============================================================
+
+Found 80 phase(s) across portal
+✅ PASSED: get_phases
+
+============================================================
+🧪 TEST: list_phases
+============================================================
+
+Found 0 phase(s):
+✅ PASSED: list_phases
+
+============================================================
+🧪 TEST: create_phase
+============================================================
+
+Phase Created:
+  Name: Test Phase 1234567890
+  ID: 123456789
+  Status: Open
+  Start Date: N/A
+  End Date: N/A
+✅ PASSED: create_phase
+
+... (remaining test outputs)
+
+============================================================
+✨ All Phase Smoke Tests Passed!
+============================================================
+```
+
 ## Expected Output
 
 ```

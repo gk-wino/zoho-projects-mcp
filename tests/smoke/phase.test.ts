@@ -83,15 +83,11 @@ async function testCreatePhase(client: Client, projectId: string) {
 	try {
 		const timestamp = Date.now();
 		const phaseName = `Test Phase ${timestamp}`;
-		const now = new Date();
-		const startDate = now.toISOString().split('T')[0];
-		const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+		// Don't send start_date and end_date - they appear to be optional
 		const response = await callTool(client, 'create_phase', {
 			project_id: projectId,
 			name: phaseName,
-			start_date: startDate,
-			end_date: endDate,
 			flag: 'internal',
 		});
 		const rawData = parseToolResponse(response);
