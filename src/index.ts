@@ -251,6 +251,55 @@ class ZohoProjectsServer {
 							params.flag,
 						);
 
+					// Task List Comments
+					case 'get_tasklist_comments':
+						return await this.handlers.tasklists.getTaskListComments(params);
+					case 'get_tasklist_comment':
+						return await this.handlers.tasklists.getTaskListComment(
+							params.project_id,
+							params.tasklist_id,
+							params.comment_id,
+						);
+					case 'add_tasklist_comment':
+						return await this.handlers.tasklists.addTaskListComment(params);
+					case 'update_tasklist_comment':
+						return await this.handlers.tasklists.updateTaskListComment(params);
+					case 'delete_tasklist_comment':
+						return await this.handlers.tasklists.deleteTaskListComment(
+							params.project_id,
+							params.tasklist_id,
+							params.comment_id,
+						);
+
+					// Task List Followers
+					case 'get_tasklist_followers':
+						return await this.handlers.tasklists.getTaskListFollowers(params);
+					case 'follow_tasklist':
+						return await this.handlers.tasklists.followTaskList(
+							params.project_id,
+							params.tasklist_id,
+						);
+					case 'unfollow_tasklist':
+						return await this.handlers.tasklists.unfollowTaskList(
+							params.project_id,
+							params.tasklist_id,
+						);
+
+					// Task List Templates
+					case 'get_tasklist_templates':
+						return await this.handlers.tasklists.getTaskListTemplates(params.page, params.per_page);
+					case 'get_tasks_from_tasklist_template':
+						return await this.handlers.tasklists.getTasksFromTaskListTemplate(
+							params.tasklist_id,
+							params.page,
+							params.per_page,
+						);
+					case 'make_tasklist_template':
+						return await this.handlers.tasklists.makeTaskListTemplate(
+							params.project_id,
+							params.tasklist_id,
+						);
+
 					// Users
 					case 'list_users':
 						return await this.handlers.users.listUsers(params.project_id);

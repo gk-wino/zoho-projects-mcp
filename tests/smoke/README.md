@@ -359,6 +359,196 @@ Phase Created:
 ============================================================
 ```
 
+## TaskList Smoke Tests
+
+Tests in `tasklist.test.ts`:
+
+### 1. List Task Lists (`list_tasklists`)
+
+- Calls the `list_tasklists` tool for a specific project
+- Validates response contains tasklists array
+- Logs count of task lists found
+- Displays first task list details if available
+
+### 2. Create Task List (`create_tasklist`)
+
+- Creates a new test task list with:
+  - Unique timestamped name
+  - Internal flag
+- Validates task list creation response
+- Stores task list ID for subsequent tests
+- Logs created task list details
+
+### 3. Get Task List (`get_tasklist`)
+
+- Retrieves detailed information about the created task list
+- Validates task list ID and name
+- Logs comprehensive task list information:
+  - Name and ID
+  - Status (active/archived)
+  - Flag type (internal/external)
+
+### 4. Update Task List (`update_tasklist`)
+
+- Updates the test task list:
+  - Changes name to timestamped variant
+  - Switches flag from internal to external
+- Validates response structure
+- Logs updated task list details
+
+### 5. Add Task List Comment (`add_tasklist_comment`)
+
+- Adds a test comment to the task list
+- Validates comment creation
+- Stores comment ID for cleanup
+- Logs comment details
+
+### 6. Get Task List Comments (`get_tasklist_comments`)
+
+- Retrieves all comments on the task list
+- Validates response structure
+- Logs comment count
+
+### 7. Follow Task List (`follow_tasklist`)
+
+- Follows the task list to receive updates
+- Validates successful follow operation
+- Logs follow confirmation
+
+### 8. Get Task List Followers (`get_tasklist_followers`)
+
+- Retrieves followers of the task list
+- Validates response structure
+- Logs follower count
+
+### 9. Unfollow Task List (`unfollow_tasklist`)
+
+- Unfollows the task list to stop receiving updates
+- Validates successful unfollow operation
+- Logs unfollow confirmation
+
+### 10. Delete Task List Comment (`delete_tasklist_comment`)
+
+- Deletes the test comment created earlier
+- Validates successful deletion
+- Logs deletion confirmation
+
+### 11. Delete Task List (`delete_tasklist`)
+
+- Deletes the test task list
+- Validates successful deletion
+- Logs deletion confirmation
+
+### 12. Get Task List Templates (`get_tasklist_templates`)
+
+- Retrieves task list templates from the portal
+- Validates response structure
+- Logs template count
+
+### Run TaskList Tests
+
+```bash
+npm run test:smoke:tasklist
+```
+
+### Expected Output (TaskList Tests)
+
+```
+🚀 Starting TaskList Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+✅ Using cached test project: Zoho Project MCP Tests (ID: 1817452000005354052)
+
+============================================================
+🧪 TEST: list_tasklists
+============================================================
+
+Found 3 task lists
+First task list: Test TaskList 1769117756546 (ID: 1817452000005350143)
+✅ PASSED: list_tasklists
+
+============================================================
+🧪 TEST: create_tasklist
+============================================================
+
+Created task list: Test TaskList 1769117824124 (ID: 1817452000005351168)
+✅ PASSED: create_tasklist
+
+============================================================
+🧪 TEST: get_tasklist
+============================================================
+
+Task list: Test TaskList 1769117824124
+Status: active
+Flag: internal
+✅ PASSED: get_tasklist
+
+============================================================
+🧪 TEST: update_tasklist
+============================================================
+
+Updated task list: Updated TaskList 1769117825831
+New flag: external
+✅ PASSED: update_tasklist
+
+============================================================
+🧪 TEST: add_tasklist_comment
+============================================================
+
+Added comment to task list
+✅ PASSED: add_tasklist_comment
+
+============================================================
+🧪 TEST: get_tasklist_comments
+============================================================
+
+Found 1 comments
+✅ PASSED: get_tasklist_comments
+
+============================================================
+🧪 TEST: follow_tasklist
+============================================================
+
+Successfully followed task list
+✅ PASSED: follow_tasklist
+
+============================================================
+🧪 TEST: get_tasklist_followers
+============================================================
+
+Found 1 followers
+✅ PASSED: get_tasklist_followers
+
+============================================================
+🧪 TEST: unfollow_tasklist
+============================================================
+
+Successfully unfollowed task list
+✅ PASSED: unfollow_tasklist
+
+============================================================
+🧪 TEST: delete_tasklist
+============================================================
+
+Successfully deleted task list (ID: 1817452000005351168)
+✅ PASSED: delete_tasklist
+
+============================================================
+🧪 TEST: get_tasklist_templates
+============================================================
+
+Found 10 task list templates
+✅ PASSED: get_tasklist_templates
+
+============================================================
+✨ All TaskList Smoke Tests Passed!
+============================================================
+
+🧹 Cleaning up...
+✨ Cleanup completed
+```
+
 ## Expected Output
 
 ```

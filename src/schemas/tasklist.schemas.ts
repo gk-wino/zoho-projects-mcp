@@ -97,4 +97,168 @@ export const tasklistSchemas = {
 			required: ['project_id', 'flag'],
 		},
 	},
+	// Comments operations
+	get_tasklist_comments: {
+		name: 'get_tasklist_comments',
+		description: 'Retrieve multiple comments from a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				...paginationProperties,
+				sort_by: {
+					type: 'string',
+					description: 'Sort criteria. Format: ASC(field_name) or DESC(field_name)',
+				},
+			},
+			required: ['project_id', 'tasklist_id'],
+		},
+	},
+	get_tasklist_comment: {
+		name: 'get_tasklist_comment',
+		description: 'Retrieve a specific comment from a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				comment_id: { type: 'string', description: 'Comment ID' },
+			},
+			required: ['project_id', 'tasklist_id', 'comment_id'],
+		},
+	},
+	add_tasklist_comment: {
+		name: 'add_tasklist_comment',
+		description: 'Add a comment to a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				comment: {
+					type: 'string',
+					description: 'Comment text (max 500,000 characters)',
+				},
+				attachment_ids: {
+					type: 'array',
+					description: 'Array of attachment IDs (max 10)',
+					items: { type: 'string' },
+				},
+			},
+			required: ['project_id', 'tasklist_id', 'comment'],
+		},
+	},
+	update_tasklist_comment: {
+		name: 'update_tasklist_comment',
+		description: 'Modify a comment in a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				comment_id: { type: 'string', description: 'Comment ID' },
+				comment: {
+					type: 'string',
+					description: 'Updated comment text (max 500,000 characters)',
+				},
+				attachment_ids: {
+					type: 'array',
+					description: 'Array of attachment IDs (max 10)',
+					items: { type: 'string' },
+				},
+			},
+			required: ['project_id', 'tasklist_id', 'comment_id', 'comment'],
+		},
+	},
+	delete_tasklist_comment: {
+		name: 'delete_tasklist_comment',
+		description: 'Remove a comment from a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				comment_id: { type: 'string', description: 'Comment ID' },
+			},
+			required: ['project_id', 'tasklist_id', 'comment_id'],
+		},
+	},
+	// Followers operations
+	get_tasklist_followers: {
+		name: 'get_tasklist_followers',
+		description: 'Retrieve followers for a task list',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+				...paginationProperties,
+			},
+			required: ['project_id', 'tasklist_id'],
+		},
+	},
+	follow_tasklist: {
+		name: 'follow_tasklist',
+		description: 'Follow a task list in a project to receive updates and notifications',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+			},
+			required: ['project_id', 'tasklist_id'],
+		},
+	},
+	unfollow_tasklist: {
+		name: 'unfollow_tasklist',
+		description: 'Unfollow a task list in a project to stop receiving updates and notifications',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+			},
+			required: ['project_id', 'tasklist_id'],
+		},
+	},
+	// Template operations
+	get_tasklist_templates: {
+		name: 'get_tasklist_templates',
+		description:
+			'Retrieve task lists that are associated with a template in the Zoho Projects portal',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...paginationProperties,
+			},
+		},
+	},
+	get_tasks_from_tasklist_template: {
+		name: 'get_tasks_from_tasklist_template',
+		description: 'Retrieve tasks from a task list template',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				tasklist_id: {
+					type: 'string',
+					description: 'Task List Template ID',
+				},
+				...paginationProperties,
+			},
+			required: ['tasklist_id'],
+		},
+	},
+	make_tasklist_template: {
+		name: 'make_tasklist_template',
+		description: 'Convert a task list into a template in a project',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				...projectIdProperty,
+				tasklist_id: { type: 'string', description: 'Task List ID' },
+			},
+			required: ['project_id', 'tasklist_id'],
+		},
+	},
 } as const;
