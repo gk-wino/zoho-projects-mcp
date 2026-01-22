@@ -608,6 +608,22 @@ class ZohoProjectsServer {
 						required: ['project_id', 'tasklist_id'],
 					},
 				},
+				{
+					name: 'create_default_tasklist',
+					description: 'Create a default task list for a project',
+					inputSchema: {
+						type: 'object',
+						properties: {
+							project_id: { type: 'string', description: 'Project ID' },
+							flag: {
+								type: 'string',
+								description: 'Task list flag',
+								enum: ['internal', 'external'],
+							},
+						},
+						required: ['project_id', 'flag'],
+					},
+				},
 
 				// Users
 				{
@@ -696,6 +712,8 @@ class ZohoProjectsServer {
 						return await this.updateTaskList(params);
 					case 'delete_tasklist':
 						return await this.deleteTaskList(params.project_id, params.tasklist_id);
+					case 'create_default_tasklist':
+						return await this.createDefaultTaskList(params.project_id, params.flag);
 
 					// Users
 					case 'list_users':
@@ -1035,6 +1053,22 @@ class ZohoProjectsServer {
 				{
 					type: 'text',
 					text: `Task list deleted successfully:\n${JSON.stringify(data, null, 2)}`,
+				},
+			],
+		};
+	}
+
+	private async createDefaultTaskList(projectId: string, flag: string) {
+		const data = await this.makeRequest(
+			`/portal/${this.config.portalId}/projects/${projectId}/default-tasklists`,
+			'POST',
+			{ flag },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: `Default task list created successfully:\n${JSON.stringify(data, null, 2)}`,
 				},
 			],
 		};
