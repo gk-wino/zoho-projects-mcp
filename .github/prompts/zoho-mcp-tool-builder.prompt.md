@@ -176,6 +176,7 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 
 - Check if smoke test exists: `tests/smoke/{domain}.test.ts`
 - If not, create new test file using this structure:
+- **IMPORTANT**: Always include a cleanup function to remove orphaned test items from previous failed runs
 
   ```typescript
   #!/usr/bin/env node
@@ -221,6 +222,57 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
       }
   }
 
+  async function cleanupOrphaned{Domain}s(client: Client, projectId?: string) {
+      console.log('\n🧹 Cleaning up orphaned test {domain}s...');
+
+      try {
+          // Get all {domain}s
+          const response = await callTool(client, 'list_{domain}s', {
+              project_id: projectId, // Include if domain requires project
+              page: 1,
+              per_page: 100,
+          });
+          const data = parseToolResponse(response);
+
+          if (!data.{domain}s || !Array.isArray(data.{domain}s)) {
+              console.log('No {domain}s found or unable to parse response');
+              return;
+          }
+
+          // Filter orphaned test {domain}s (matching test patterns)
+          const testPatterns = [/^Test {Domain} \d+$/, /^Updated {Domain} \d+$/];
+          const orphaned{Domain}s = data.{domain}s.filter(({domain}: any) =>
+              testPatterns.some((pattern) => pattern.test({domain}.name)),
+          );
+
+          if (orphaned{Domain}s.length === 0) {
+              console.log('✅ No orphaned test {domain}s found');
+              return;
+          }
+
+          console.log(`Found ${orphaned{Domain}s.length} orphaned test {domain}(s)`);
+
+          // Delete each orphaned {domain}
+          for (const {domain} of orphaned{Domain}s) {
+              try {
+                  await callTool(client, 'delete_{domain}', {
+                      project_id: projectId, // Include if domain requires project
+                      {domain}_id: {domain}.id,
+                  });
+                  console.log(`   Deleted: ${{{domain}.name}} (ID: ${{{domain}.id}})`);
+                  await wait(300); // Small delay between deletions
+              } catch (error: any) {
+                  console.warn(`   Failed to delete ${{{domain}.name}}: ${{error.message}}`);
+              }
+          }
+
+          console.log('✅ Cleanup completed');
+      } catch (error) {
+          console.warn('⚠️  Cleanup failed:', error);
+          // Don't throw - cleanup failures shouldn't fail the test suite
+      }
+  }
+
   async function run{Domain}SmokeTests() {
       console.log('\n🚀 Starting {Domain} Smoke Tests\n');
       let client: Client | null = null;
@@ -239,6 +291,10 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
           // Skip for: portals, projects, users, teams, tags
           const testProject = await initializeTestEnvironment(client);
           console.log();
+
+          // Cleanup orphaned test {domain}s from previous failed runs
+          await cleanupOrphaned{Domain}s(client, testProject.projectId);
+          await wait(500);
 
           // Run all test functions, passing testProject where needed
           await testToolName(client, testProject.projectId);
@@ -411,6 +467,12 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
 - Handle errors gracefully with clear messages
 - Add delays between tests (`await wait(500)`) to avoid rate limits
 - Always cleanup client connection before exit
+- **Add cleanup functions** to remove orphaned test data:
+  - Create a cleanup function that searches for test items matching predictable patterns (e.g., "Test {Module} {timestamp}")
+  - Call cleanup at the start of test suite to remove orphans from previous failed runs
+  - Use regex patterns to identify test items (e.g., `/^Test TaskList \d+$/`)
+  - Don't throw errors on cleanup failures - log warnings instead
+  - Add small delays between cleanup operations to avoid rate limits
 
 ### Error Handling
 

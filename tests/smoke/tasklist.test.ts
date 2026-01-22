@@ -359,6 +359,57 @@ async function testDeleteTaskList(client: Client, projectId: string, tasklistId:
 	}
 }
 
+async function cleanupOrphanedTaskLists(client: Client, projectId: string) {
+	console.log('\n🧹 Cleaning up orphaned test task lists...');
+
+	try {
+		// Get all task lists
+		const response = await callTool(client, 'list_tasklists', {
+			project_id: projectId,
+			page: 1,
+			per_page: 100,
+		});
+		const data = parseToolResponse(response);
+
+		if (!data.tasklists || !Array.isArray(data.tasklists)) {
+			console.log('No task lists found or unable to parse response');
+			return;
+		}
+
+		// Filter orphaned test task lists (matching test patterns)
+		const testPatterns = [/^Test TaskList \d+$/, /^Updated TaskList \d+$/];
+		const orphanedTaskLists = data.tasklists.filter((tasklist: any) =>
+			testPatterns.some((pattern) => pattern.test(tasklist.name)),
+		);
+
+		if (orphanedTaskLists.length === 0) {
+			console.log('✅ No orphaned test task lists found');
+			return;
+		}
+
+		console.log(`Found ${orphanedTaskLists.length} orphaned test task list(s)`);
+
+		// Delete each orphaned task list
+		for (const tasklist of orphanedTaskLists) {
+			try {
+				await callTool(client, 'delete_tasklist', {
+					project_id: projectId,
+					tasklist_id: tasklist.id,
+				});
+				console.log(`   Deleted: ${tasklist.name} (ID: ${tasklist.id})`);
+				await wait(300); // Small delay between deletions
+			} catch (error: any) {
+				console.warn(`   Failed to delete ${tasklist.name}: ${error.message}`);
+			}
+		}
+
+		console.log('✅ Cleanup completed');
+	} catch (error) {
+		console.warn('⚠️  Cleanup failed:', error);
+		// Don't throw - cleanup failures shouldn't fail the test suite
+	}
+}
+
 async function runTaskListSmokeTests() {
 	console.log('\n🚀 Starting TaskList Smoke Tests\n');
 	let client: Client | null = null;
@@ -375,6 +426,10 @@ async function runTaskListSmokeTests() {
 		// Initialize test environment with persistent project
 		const testProject = await initializeTestEnvironment(client);
 		console.log();
+
+		// Cleanup orphaned test task lists from previous failed runs
+		await cleanupOrphanedTaskLists(client, testProject.projectId);
+		await wait(500);
 
 		// Run all test functions
 		await testListTaskLists(client, testProject.projectId);
