@@ -68,34 +68,4 @@ export class ProjectHandler {
 			],
 		};
 	}
-
-	async restoreProject(projectId: string) {
-		await this.client.request(
-			`/portal/${this.client.getPortalId()}/projects/${projectId}/restore`,
-			'POST',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Project restored from trash successfully.`,
-				},
-			],
-		};
-	}
-
-	async deleteProject(projectId: string) {
-		await this.client.request(
-			`/portal/${this.client.getPortalId()}/projects/${projectId}`,
-			'DELETE',
-		);
-		return {
-			content: [
-				{
-					type: 'text',
-					text: `Project permanently deleted. This action cannot be undone.`,
-				},
-			],
-		};
-	}
 }

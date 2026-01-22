@@ -194,26 +194,4 @@ export const projectSchemas = {
 			required: ['project_id'],
 		},
 	},
-	restore_project: {
-		name: 'restore_project',
-		description: 'Restore a project from the trash',
-		inputSchema: {
-			type: 'object',
-			properties: {
-				...projectIdProperty,
-			},
-			required: ['project_id'],
-		},
-	},
-	delete_project: {
-		name: 'delete_project',
-		description: 'Permanently delete a project from the trash (cannot be undone)',
-		inputSchema: {
-			type: 'object',
-			properties: {
-				...projectIdProperty,
-			},
-			required: ['project_id'],
-		},
-	},
 } as const;

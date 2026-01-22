@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -107,6 +108,86 @@ export function parseToolResponse(response: any): any {
 	}
 
 	return content;
+}
+
+// Initialize test environment with cached test project
+export async function initializeTestEnvironment(client: Client): Promise<{
+	projectId: string;
+	projectName: string;
+	projectKey?: string;
+}> {
+	const cacheFilePath = path.resolve(__dirname, '.test-project-cache.json');
+	const testProjectName = 'Zoho Project MCP Tests';
+
+	// Try to read from cache first
+	try {
+		const cacheData = await fs.readFile(cacheFilePath, 'utf-8');
+		const cached = JSON.parse(cacheData);
+		console.log(`✅ Using cached test project: ${cached.projectName} (ID: ${cached.projectId})`);
+		return cached;
+	} catch (error) {
+		// Cache doesn't exist or is invalid, proceed to search/create
+	}
+
+	console.log(`🔍 Searching for test project: ${testProjectName}`);
+
+	// Search for the test project
+	try {
+		const response = await callTool(client, 'list_projects', {
+			page: 1,
+			per_page: 100,
+		});
+		const projects = parseToolResponse(response);
+
+		if (Array.isArray(projects)) {
+			const testProject = projects.find(
+				(project: any) => project.name === testProjectName,
+			);
+
+			if (testProject) {
+				console.log(`✅ Found existing test project (ID: ${testProject.id})`);
+				const projectData = {
+					projectId: testProject.id,
+					projectName: testProject.name,
+					projectKey: testProject.key,
+				};
+
+				// Cache the project data
+				await fs.writeFile(cacheFilePath, JSON.stringify(projectData, null, 2), 'utf-8');
+				return projectData;
+			}
+		}
+	} catch (error) {
+		console.warn('⚠️  Error searching for test project:', error);
+	}
+
+	// Project not found, create it
+	console.log(`🔨 Creating new test project: ${testProjectName}`);
+
+	const currentYear = new Date().getFullYear();
+	const createResponse = await callTool(client, 'create_project', {
+		name: testProjectName,
+		description:
+			'Persistent test project for MCP smoke tests. This project is used for testing task lists, tasks, and other features.',
+		project_type: 'active',
+		start_date: `${currentYear}-01-01`,
+		end_date: `${currentYear + 1}-12-31`,
+		is_public_project: false,
+	});
+
+	const createdProject = parseToolResponse(createResponse);
+	console.log(`✅ Created test project (ID: ${createdProject.id})`);
+
+	const projectData = {
+		projectId: createdProject.id,
+		projectName: createdProject.name,
+		projectKey: createdProject.key,
+	};
+
+	// Cache the project data
+	await fs.writeFile(cacheFilePath, JSON.stringify(projectData, null, 2), 'utf-8');
+
+	return projectData;
 }
 
 // Test result logging

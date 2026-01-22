@@ -217,64 +217,66 @@ async function testTrashProject(client: Client, projectId: string) {
 	}
 }
 
-async function testRestoreProject(client: Client, projectId: string) {
-	const testName = 'restore_project';
+async function cleanupTestProjects(client: Client) {
+	const testName = 'cleanup_test_projects';
 	logTestStart(testName);
 
 	try {
-		const response = await callTool(client, 'restore_project', {
-			project_id: projectId,
+		// Get all projects with pagination
+		const response = await callTool(client, 'list_projects', {
+			page: 1,
+			per_page: 100,
+		});
+		const projects = parseToolResponse(response);
+
+		if (!Array.isArray(projects)) {
+			throw new Error('Expected array of projects');
+		}
+
+		// Filter test projects with valid timestamp pattern
+		const testProjectPattern = /^Test Project (\d{13})$/;
+		const testProjects = projects.filter((project: any) => {
+			const match = project.name?.match(testProjectPattern);
+			if (!match) return false;
+
+			// Validate timestamp is a reasonable number (13 digits)
+			const timestamp = parseInt(match[1]);
+			return timestamp > 1000000000000 && timestamp < 9999999999999;
 		});
 
-		// The response should indicate success
-		console.log('\nProject Restored from Trash:');
-		console.log(`  ID: ${projectId}`);
-		console.log(`  Status: Active`);
-
-		logTestSuccess(testName, { projectId });
-		return true;
-	} catch (error: any) {
-		const shouldThrow = logTestFailure(testName, error);
-		if (shouldThrow) {
-			throw error;
-		}
-		return false;
-	}
-}
-
-async function testDeleteProject(client: Client, projectId: string) {
-	const testName = 'delete_project';
-	logTestStart(testName);
-
-	try {
-		// First move to trash again if not already there
-		try {
-			await callTool(client, 'trash_project', {
-				project_id: projectId,
-			});
-			await wait(1000);
-		} catch (e) {
-			// May already be in trash, ignore error
+		if (testProjects.length === 0) {
+			console.log('\n✨ No test projects found to clean up');
+			logTestSuccess(testName);
+			return;
 		}
 
-		// Then permanently delete
-		const response = await callTool(client, 'delete_project', {
-			project_id: projectId,
+		console.log(`\n🗑️  Found ${testProjects.length} test project(s) to trash:`);
+		testProjects.forEach((project: any, index: number) => {
+			console.log(`  ${index + 1}. ${project.name} (ID: ${project.id})`);
 		});
 
-		// The response should indicate success
-		console.log('\nProject Permanently Deleted:');
-		console.log(`  ID: ${projectId}`);
-		console.log(`  Status: Cannot be undone`);
+		// Trash each test project
+		let trashed = 0;
+		let skipped = 0;
 
-		logTestSuccess(testName, { projectId });
-		return true;
-	} catch (error: any) {
-		const shouldThrow = logTestFailure(testName, error);
-		if (shouldThrow) {
-			throw error;
+		for (const project of testProjects) {
+			try {
+				await callTool(client, 'trash_project', {
+					project_id: project.id,
+				});
+				trashed++;
+				await wait(200); // Small delay between operations
+			} catch (error: any) {
+				// Skip if already in trash or other errors
+				skipped++;
+			}
 		}
-		return false;
+
+		console.log(`\n✅ Cleanup completed: ${trashed} trashed, ${skipped} skipped`);
+		logTestSuccess(testName, { trashed, skipped });
+	} catch (error) {
+		logTestFailure(testName, error);
+		throw error;
 	}
 }
 
@@ -311,12 +313,8 @@ async function runProjectSmokeTests() {
 		await testTrashProject(client, createdProjectId!);
 		await wait(1000);
 
-		// Test 6: Restore project from trash (may be skipped due to permissions)
-		const restored = await testRestoreProject(client, createdProjectId!);
-		await wait(1000);
-
-		// Test 7: Permanently delete project (may be skipped due to permissions)
-		const deleted = await testDeleteProject(client, createdProjectId!);
+		// Test 6: Cleanup all test projects
+		await cleanupTestProjects(client);
 		await wait(500);
 
 		// Summary
@@ -329,10 +327,7 @@ async function runProjectSmokeTests() {
 		console.log('  ✅ get_project');
 		console.log('  ✅ update_project');
 		console.log('  ✅ trash_project');
-		console.log(
-			restored ? '  ✅ restore_project' : '  ⏭️  restore_project (skipped - permissions)',
-		);
-		console.log(deleted ? '  ✅ delete_project' : '  ⏭️  delete_project (skipped - permissions)');
+		console.log('  ✅ cleanup_test_projects');
 		console.log();
 
 		await cleanup(client);

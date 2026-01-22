@@ -142,20 +142,14 @@ Tests in `project.test.ts`:
 - Project can be restored within 30 days
 - Logs trash operation
 
-### 6. Restore Project (`restore_project`)
+### 6. Cleanup Test Projects (`cleanup_test_projects`)
 
-- Attempts to restore project from trash
-- May be skipped if user lacks permissions
-- Validates restoration on success
-- Logs result or skip reason
-
-### 7. Delete Project (`delete_project`)
-
-- Permanently deletes project from trash
-- May be skipped if user lacks permissions
-- Validates permanent deletion on success
-- Cannot be undone
-- Logs result or skip reason
+- Lists all projects in the portal
+- Identifies test projects matching pattern: `Test Project {timestamp}`
+- Validates timestamp format (13 digits)
+- Attempts to trash each test project found
+- Logs summary of trashed and skipped projects
+- Helps maintain clean portal environment after testing
 
 ### Run Project Tests
 

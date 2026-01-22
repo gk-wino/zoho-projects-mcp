@@ -105,11 +105,6 @@ class ZohoProjectsServer {
 						return await this.handlers.projects.updateProject(params);
 					case 'trash_project':
 						return await this.handlers.projects.trashProject(params.project_id);
-					case 'restore_project':
-						return await this.handlers.projects.restoreProject(params.project_id);
-					case 'delete_project':
-						return await this.handlers.projects.deleteProject(params.project_id);
-
 					// Task operations
 					case 'list_tasks':
 						return await this.handlers.tasks.listTasks(

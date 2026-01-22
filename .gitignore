@@ -39,6 +39,9 @@ test-*.sh
 *.test.js
 *.spec.js
 
+# Test Cache Files
+tests/smoke/.test-project-cache.json
+
 # Temporary Files
 *.tmp
 *.temp
