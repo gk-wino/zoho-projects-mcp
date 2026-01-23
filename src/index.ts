@@ -189,6 +189,80 @@ class ZohoProjectsServer {
 							params.comment_id,
 						);
 
+					// Issue additional operations
+					case 'get_issue_description':
+						return await this.handlers.issues.getIssueDescription(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'get_issue_status_transition':
+						return await this.handlers.issues.getIssueStatusTransition(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'get_issue_linked_issues':
+						return await this.handlers.issues.getIssueLinkedIssues(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'link_issues':
+						return await this.handlers.issues.linkIssues(params);
+					case 'bulk_link_issues':
+						return await this.handlers.issues.bulkLinkIssues(params);
+					case 'change_link_type':
+						return await this.handlers.issues.changeLinkType(params);
+					case 'unlink_issues':
+						return await this.handlers.issues.unlinkIssues(
+							params.project_id,
+							params.issue_id,
+							params.link_id,
+						);
+					case 'get_issue_associated_tasks':
+						return await this.handlers.issues.getIssueAssociatedTasks(params);
+					case 'associate_tasks_to_issue':
+						return await this.handlers.issues.associateTasksToIssue(params);
+					case 'bulk_associate_tasks':
+						return await this.handlers.issues.bulkAssociateTasks(params);
+					case 'dissociate_task_from_issue':
+						return await this.handlers.issues.dissociateTaskFromIssue(
+							params.project_id,
+							params.issue_id,
+							params.task_id,
+						);
+					case 'get_issue_resolution':
+						return await this.handlers.issues.getIssueResolution(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'add_issue_resolution':
+						return await this.handlers.issues.addIssueResolution(params);
+					case 'update_issue_resolution':
+						return await this.handlers.issues.updateIssueResolution(params);
+					case 'delete_issue_resolution':
+						return await this.handlers.issues.deleteIssueResolution(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'get_issue_followers':
+						return await this.handlers.issues.getIssueFollowers(params.project_id, params.issue_id);
+					case 'follow_issue':
+						return await this.handlers.issues.followIssue(params);
+					case 'remove_issue_followers':
+						return await this.handlers.issues.removeIssueFollowers(
+							params.project_id,
+							params.issue_id,
+						);
+					case 'get_issue_attachments':
+						return await this.handlers.issues.getIssueAttachments(params);
+					case 'associate_issue_attachments':
+						return await this.handlers.issues.associateIssueAttachments(params);
+					case 'dissociate_issue_attachment':
+						return await this.handlers.issues.dissociateIssueAttachment(
+							params.project_id,
+							params.issue_id,
+							params.attachment_id,
+						);
+
 					// Phase operations
 					case 'get_phases':
 						return await this.handlers.phases.getPhases(params);

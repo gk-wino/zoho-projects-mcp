@@ -12,6 +12,7 @@ tests/smoke/
 ├── phase.test.ts        # Phase/Milestone functionality tests
 ├── task.test.ts         # Task functionality tests
 ├── tasklist.test.ts     # Task List functionality tests
+├── issue.test.ts        # Issue (Bug) functionality tests
 ├── wysiwyg.test.ts      # WYSIWYG editor formatting tests
 ├── inspect-task.test.ts # Task inspector utility (for debugging HTML)
 └── README.md            # This file
@@ -719,6 +720,285 @@ Found 10 task list templates
 🧹 Cleaning up...
 ✨ Cleanup completed
 ```
+
+## Issue Smoke Tests
+
+Tests in `issue.test.ts`:
+
+### Overview
+
+The issue smoke tests verify all issue-related functionality including creation, updating, linking, resolution management, comments, followers, and attachments. Issues in Zoho Projects are used for bug tracking and problem management.
+
+### 1. List Issues (`list_issues`)
+
+- Calls the `list_issues` tool with pagination
+- Validates response contains issues array
+- Logs count of issues found in the project
+
+### 2. Create Issue (`create_issue`)
+
+- Creates a new test issue with:
+  - Unique timestamped name
+  - Description
+  - Flag (Internal/External)
+- Validates issue creation response
+- Stores issue ID for subsequent tests
+- Logs created issue details
+
+### 3. Get Issue (`get_issue`)
+
+- Retrieves details of the created issue
+- Validates issue ID matches
+- Logs comprehensive issue information
+
+### 4. Get Issue Description (`get_issue_description`)
+
+- Retrieves the detailed description of an issue
+- Validates response structure
+- Useful for issues with rich text descriptions
+
+### 5. Update Issue (`update_issue`)
+
+- Updates the test issue with:
+  - New name (timestamped)
+  - Updated description
+- Validates response structure
+- Logs update confirmation
+
+### 6. Get Issue Activities (`get_issue_activities`)
+
+- Retrieves all activities performed on the issue
+- Includes create, update, comment, status change activities
+- Validates response structure with pagination
+- Logs activity count
+
+### 7. Get Issue Status Transition (`get_issue_status_transition`)
+
+- Retrieves the complete status transition history
+- Shows progression through different statuses
+- Logs transition details
+
+### 8. Add Issue Comment (`add_issue_comment`)
+
+- Adds a test comment to the issue
+- Validates comment creation
+- Stores comment ID for reference
+- Logs comment details
+
+### 9. Get Issue Comments (`get_issue_comments`)
+
+- Retrieves all comments on the issue
+- Validates response structure with pagination
+- Logs comment count
+
+### 10. Clone Issue (`clone_issue`)
+
+- Creates a duplicate of the issue
+- Validates clone creation
+- Stores cloned issue ID for cleanup
+- Useful for creating similar issues quickly
+
+### 11. Link Issues (`link_issues`)
+
+- Establishes relationship between two issues
+- Uses link types like "Related to", "Blocks", "Duplicate of"
+- Validates link creation
+- Note: Requires link types to be configured in Zoho Projects
+
+### 12. Get Issue Linked Issues (`get_issue_linked_issues`)
+
+- Retrieves all issues linked to the current issue
+- Shows link types and relationships
+- Validates response structure
+
+### 13. Get Issue Followers (`get_issue_followers`)
+
+- Retrieves users following the issue
+- Followers receive notifications on issue updates
+- Validates response structure
+
+### 14. Get Issue Attachments (`get_issue_attachments`)
+
+- Retrieves all files attached to the issue
+- Can filter by extension or application type
+- Validates response structure
+
+### 15. Get Issue Resolution (`get_issue_resolution`)
+
+- Retrieves the resolution details if issue is resolved
+- Returns empty if no resolution exists
+- Useful for closed issues
+
+### 16. Delete Issue (`delete_issue`)
+
+- Removes the test issue from the project
+- Validates successful deletion
+- Used for cleanup after tests
+
+### Additional Features Tested
+
+#### Issue-Task Association
+
+- **Get Associated Tasks** - Retrieve tasks linked to an issue
+- **Associate Tasks** - Link tasks to an issue (many-to-many relationship)
+- **Bulk Associate Tasks** - Link multiple tasks to multiple issues
+- **Dissociate Task** - Remove task-issue association
+
+#### Issue Resolution Management
+
+- **Add Resolution** - Add resolution details when closing an issue
+- **Update Resolution** - Modify existing resolution
+- **Delete Resolution** - Remove resolution from an issue
+
+#### Issue Followers
+
+- **Follow Issue** - Add users to follow an issue
+- **Remove Followers** - Remove users from following an issue
+
+#### Issue Attachments
+
+- **Associate Attachments** - Link files to an issue
+- **Dissociate Attachment** - Remove file attachment from issue
+
+#### Issue Linking
+
+- **Bulk Link Issues** - Link multiple issues at once
+- **Change Link Type** - Modify the relationship type between linked issues
+- **Unlink Issues** - Remove link between issues
+
+### Run Issue Tests
+
+```bash
+npm run test:smoke:issue
+```
+
+### Expected Output (Issue Tests)
+
+```
+🚀 Starting Issue Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+
+🧹 Cleaning up orphaned test issues...
+✅ No orphaned test issues found
+
+============================================================
+📝 Issue Management Tests
+============================================================
+
+============================================================
+🧪 TEST: list_issues
+============================================================
+
+Found 5 issue(s)
+✅ PASSED: list_issues
+
+============================================================
+🧪 TEST: create_issue
+============================================================
+
+✅ Created issue: Test Issue 1769120045678 (ID: 123456789)
+✅ PASSED: create_issue
+
+============================================================
+🧪 TEST: get_issue
+============================================================
+
+Retrieved issue: Test Issue 1769120045678 (ID: 123456789)
+✅ PASSED: get_issue
+
+============================================================
+🧪 TEST: update_issue
+============================================================
+
+✅ Updated issue: Updated Issue 1769120049876
+✅ PASSED: update_issue
+
+============================================================
+💬 Comment Tests
+============================================================
+
+============================================================
+🧪 TEST: add_issue_comment
+============================================================
+
+✅ Added comment (ID: 987654321)
+✅ PASSED: add_issue_comment
+
+============================================================
+🧪 TEST: get_issue_comments
+============================================================
+
+Retrieved comments
+✅ PASSED: get_issue_comments
+
+============================================================
+🔗 Linking and Association Tests
+============================================================
+
+============================================================
+🧪 TEST: clone_issue
+============================================================
+
+✅ Cloned issue (ID: 111222333)
+✅ PASSED: clone_issue
+
+============================================================
+🧪 TEST: link_issues
+============================================================
+
+✅ Linked issues successfully
+✅ PASSED: link_issues
+
+============================================================
+👥 Followers, Attachments, and Resolution Tests
+============================================================
+
+============================================================
+🧪 TEST: get_issue_followers
+============================================================
+
+Retrieved issue followers
+✅ PASSED: get_issue_followers
+
+============================================================
+🧪 TEST: get_issue_resolution
+============================================================
+
+✓ No resolution exists yet (this is normal)
+✅ PASSED: get_issue_resolution
+
+============================================================
+🗑️  Cleanup Tests
+============================================================
+
+============================================================
+🧪 TEST: delete_issue
+============================================================
+
+✅ Deleted issue (ID: 111222333)
+✅ PASSED: delete_issue
+
+============================================================
+✨ All Issue Smoke Tests Passed!
+============================================================
+```
+
+### Important Notes
+
+1. **Issue vs Task**: Issues are primarily for bug tracking, while tasks are for work management. They are separate entities with different features.
+
+2. **Subtasks**: Issues do NOT support subtasks. If you need hierarchical bug tracking, use issue linking with "Blocks" or "Depends on" link types. Subtasks are a Task feature only.
+
+3. **Link Types**: Issue linking requires link types to be configured in your Zoho Projects portal. Default types include:
+   - Related to
+   - Blocks
+   - Is blocked by
+   - Duplicate of
+   - Depends on
+
+4. **Permissions**: Some operations (like adding followers or resolutions) may require specific permissions in Zoho Projects.
 
 ## Expected Output
 

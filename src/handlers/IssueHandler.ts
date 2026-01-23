@@ -60,7 +60,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Issue created successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -111,7 +111,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Issue updated successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -143,7 +143,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Issue moved successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -158,7 +158,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Issue cloned successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -200,7 +200,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Comment added successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -222,7 +222,7 @@ export class IssueHandler {
 			content: [
 				{
 					type: 'text',
-					text: `Comment updated successfully:\n${JSON.stringify(data, null, 2)}`,
+					text: JSON.stringify(data, null, 2),
 				},
 			],
 		};
@@ -238,6 +238,321 @@ export class IssueHandler {
 				{
 					type: 'text',
 					text: 'Comment deleted successfully',
+				},
+			],
+		};
+	}
+
+	async getIssueDescription(projectId: string, issueId: string) {
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/description`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async getIssueStatusTransition(projectId: string, issueId: string) {
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/statustransition`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async getIssueLinkedIssues(projectId: string, issueId: string) {
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/linkedissues`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async linkIssues(params: any) {
+		const { project_id, issue_id, link_type, issue_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/link`,
+			'POST',
+			{ link_type, issue_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async bulkLinkIssues(params: any) {
+		const { project_id, link_type, issue_ids, linking_issue_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/bulk-link-bugs`,
+			'POST',
+			{ link_type, issue_ids, linking_issue_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async changeLinkType(params: any) {
+		const { project_id, issue_id, link_id, link_type } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/link/${link_id}`,
+			'POST',
+			{ link_type },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async unlinkIssues(projectId: string, issueId: string, linkId: string) {
+		await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/link/${linkId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Issues unlinked successfully',
+				},
+			],
+		};
+	}
+
+	async getIssueAssociatedTasks(params: any) {
+		const { project_id, issue_id, sindex } = params;
+		let url = `/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/associated-tasks`;
+		if (sindex) {
+			url += `?sindex=${sindex}`;
+		}
+		const data = await this.client.request(url);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async associateTasksToIssue(params: any) {
+		const { project_id, issue_id, task_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/associate-tasks`,
+			'POST',
+			{ task_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async bulkAssociateTasks(params: any) {
+		const { project_id, issue_ids, task_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/bulk-associate-tasks`,
+			'POST',
+			{ issue_ids, task_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async dissociateTaskFromIssue(projectId: string, issueId: string, taskId: string) {
+		await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/task/${taskId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Task dissociated successfully',
+				},
+			],
+		};
+	}
+
+	async getIssueResolution(projectId: string, issueId: string) {
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/resolution`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async addIssueResolution(params: any) {
+		const { project_id, issue_id, resolution, status_id, attachment_ids } = params;
+
+		const requestBody: any = { resolution };
+		if (status_id) requestBody.status_id = status_id;
+		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
+
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/resolution`,
+			'POST',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async updateIssueResolution(params: any) {
+		const { project_id, issue_id, resolution, status_id, attachment_ids } = params;
+
+		const requestBody: any = { resolution };
+		if (status_id) requestBody.status_id = status_id;
+		if (attachment_ids) requestBody.attachment_ids = attachment_ids;
+
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/resolution`,
+			'PUT',
+			requestBody,
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async deleteIssueResolution(projectId: string, issueId: string) {
+		await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/resolution`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Resolution deleted successfully',
+				},
+			],
+		};
+	}
+
+	async getIssueFollowers(projectId: string, issueId: string) {
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/followers`,
+		);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async followIssue(params: any) {
+		const { project_id, issue_id, follower_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/followers`,
+			'POST',
+			{ follower_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async removeIssueFollowers(projectId: string, issueId: string) {
+		await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/followers`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Followers removed successfully',
+				},
+			],
+		};
+	}
+
+	async getIssueAttachments(params: any) {
+		const { project_id, issue_id, extension_ids, app_types, sub_type } = params;
+
+		let url = `/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/attachments`;
+		const queryParams: string[] = [];
+
+		if (extension_ids) queryParams.push(`extension_ids=${JSON.stringify(extension_ids)}`);
+		if (app_types) queryParams.push(`app_types=${JSON.stringify(app_types)}`);
+		if (sub_type) queryParams.push(`sub_type=${sub_type}`);
+
+		if (queryParams.length > 0) {
+			url += `?${queryParams.join('&')}`;
+		}
+
+		const data = await this.client.request(url);
+		return {
+			content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+		};
+	}
+
+	async associateIssueAttachments(params: any) {
+		const { project_id, issue_id, attachment_ids } = params;
+		const data = await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${project_id}/issues/${issue_id}/attachments`,
+			'POST',
+			{ attachment_ids },
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(data, null, 2),
+				},
+			],
+		};
+	}
+
+	async dissociateIssueAttachment(projectId: string, issueId: string, attachmentId: string) {
+		await this.client.request(
+			`/portal/${this.client.getPortalId()}/projects/${projectId}/issues/${issueId}/attachments/${attachmentId}`,
+			'DELETE',
+		);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: 'Attachment dissociated successfully',
 				},
 			],
 		};
