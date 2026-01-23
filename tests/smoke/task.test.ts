@@ -188,6 +188,80 @@ async function testCreateTask(client: Client, projectId: string) {
 	}
 }
 
+async function testCreateTaskWithNewFields(client: Client, projectId: string) {
+	const testName = 'create_task (with new fields)';
+	logTestStart(testName);
+
+	try {
+		const taskName = `Test Task with New Fields ${Date.now()}`;
+
+		// Create dates for start and end
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() + 1);
+		const endDate = new Date(startDate);
+		endDate.setDate(endDate.getDate() + 5);
+
+		const response = await callTool(client, 'create_task', {
+			project_id: projectId,
+			name: taskName,
+			description:
+				'This task tests the new fields: duration, dates, billing_type, completion_percentage',
+			priority: 'high',
+			start_date: startDate.toISOString(),
+			end_date: endDate.toISOString(),
+			duration: { value: '3', type: 'days' },
+			billing_type: 'billable',
+			completion_percentage: 25,
+		});
+		let data = parseToolResponse(response);
+
+		// Handle wrapped response (JSON inside success message string)
+		if (typeof data === 'string') {
+			const jsonMatch = data.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				data = JSON.parse(jsonMatch[0]);
+			}
+		}
+
+		if (!data.id) {
+			console.error('Response data:', JSON.stringify(data, null, 2));
+			throw new Error('Expected task ID in response');
+		}
+
+		console.log(`\n✅ Created task with new fields: ${data.name} (ID: ${data.id})`);
+		console.log(`Priority: ${data.priority}`);
+		console.log(`Billing Type: ${data.billing_type || 'N/A'}`);
+		console.log(`Completion: ${data.completion_percentage || 0}%`);
+		if (data.duration) {
+			console.log(`Duration: ${data.duration.value} ${data.duration.type}`);
+		}
+		if (data.start_date) {
+			console.log(`Start Date: ${new Date(data.start_date).toISOString().split('T')[0]}`);
+		}
+		if (data.end_date) {
+			console.log(`End Date: ${new Date(data.end_date).toISOString().split('T')[0]}`);
+		}
+
+		logTestSuccess(testName);
+
+		// Store the task ID for cleanup
+		const newFieldsTaskId = data.id;
+
+		// Clean up this test task
+		await wait(500);
+		await callTool(client, 'delete_task', {
+			project_id: projectId,
+			task_id: newFieldsTaskId,
+		});
+		console.log(`\n🧹 Cleaned up test task with new fields (ID: ${newFieldsTaskId})`);
+
+		return data;
+	} catch (error) {
+		logTestFailure(testName, error);
+		throw error;
+	}
+}
+
 async function testCreateSubtask(client: Client, projectId: string, parentTaskId: string) {
 	const testName = 'create_task (subtask)';
 	logTestStart(testName);
@@ -390,6 +464,55 @@ async function testUpdateTask(client: Client, projectId: string, taskId: string)
 
 		console.log(`\nUpdated task: ${data.name}`);
 		console.log(`New priority: ${data.priority}`);
+
+		logTestSuccess(testName);
+		return data;
+	} catch (error) {
+		logTestFailure(testName, error);
+		throw error;
+	}
+}
+
+async function testUpdateTaskWithNewFields(client: Client, projectId: string, taskId: string) {
+	const testName = 'update_task (with new fields)';
+	logTestStart(testName);
+
+	try {
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() + 2);
+		const endDate = new Date(startDate);
+		endDate.setDate(endDate.getDate() + 7);
+
+		const response = await callTool(client, 'update_task', {
+			project_id: projectId,
+			task_id: taskId,
+			completion_percentage: 50,
+			billing_type: 'non_billable',
+			start_date: startDate.toISOString(),
+			end_date: endDate.toISOString(),
+			duration: { value: '5', type: 'days' },
+		});
+		let data = parseToolResponse(response);
+
+		// Handle wrapped response (JSON inside success message string)
+		if (typeof data === 'string') {
+			const jsonMatch = data.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				data = JSON.parse(jsonMatch[0]);
+			}
+		}
+
+		if (!data.id) {
+			console.error('Response data:', JSON.stringify(data, null, 2));
+			throw new Error('Expected updated task data in response');
+		}
+
+		console.log(`\n✅ Updated task with new fields (ID: ${data.id})`);
+		console.log(`Completion: ${data.completion_percentage || 0}%`);
+		console.log(`Billing Type: ${data.billing_type || 'N/A'}`);
+		if (data.duration) {
+			console.log(`Duration: ${data.duration.value} ${data.duration.type}`);
+		}
 
 		logTestSuccess(testName);
 		return data;
@@ -630,6 +753,10 @@ async function runTaskSmokeTests() {
 		const createdTask = await testCreateTask(client, testProject.projectId);
 		await wait(500);
 
+		// Test 2a: Create a task with new fields (duration, dates, billing_type, completion_percentage)
+		await testCreateTaskWithNewFields(client, testProject.projectId);
+		await wait(500);
+
 		// Test 3: Create a subtask (IMPORTANT: This tests the new subtask feature)
 		if (createdTaskId) {
 			await testCreateSubtask(client, testProject.projectId, createdTaskId);
@@ -657,6 +784,12 @@ async function runTaskSmokeTests() {
 		// Test 5: Update task
 		if (createdTaskId) {
 			await testUpdateTask(client, testProject.projectId, createdTaskId);
+			await wait(500);
+		}
+
+		// Test 5a: Update task with new fields (duration, dates, billing_type, completion_percentage)
+		if (createdTaskId) {
+			await testUpdateTaskWithNewFields(client, testProject.projectId, createdTaskId);
 			await wait(500);
 		}
 

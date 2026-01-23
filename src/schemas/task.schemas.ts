@@ -66,6 +66,54 @@ export const taskSchemas = {
 					type: 'string',
 					description: 'Assignee user ZPUID (optional - get from list_users)',
 				},
+				status: {
+					type: 'object',
+					description:
+						'Task status details as JSON object with id field (optional - if not provided default open status will be used)',
+				},
+				duration: {
+					type: 'object',
+					description:
+						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3", "type": "hours"}',
+				},
+				completion_percentage: {
+					type: 'number',
+					description: 'Task completion percentage (0-100)',
+				},
+				billing_type: {
+					type: 'string',
+					description: 'Billing type for the task',
+					enum: ['none', 'billable', 'non_billable'],
+				},
+				attachments: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Array of file attachment IDs (max 10 items)',
+				},
+				owners_and_work: {
+					type: 'object',
+					description:
+						'Task owner name and work details as JSON object. Contains owners array with zpuid and work_values for each owner.',
+				},
+				tags: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Array of tags for the task',
+				},
+				teams: {
+					type: 'array',
+					items: { type: 'object' },
+					description: 'Array of team objects to associate with the task',
+				},
+				recurrence: {
+					type: 'object',
+					description: 'Recurrence details of the task as JSON object',
+				},
+				budget_info: {
+					type: 'object',
+					description:
+						'Budget details of the task as JSON object. Can include fields like budget, revenue_budget, threshold, exchange_rate.',
+				},
 			},
 			required: ['project_id', 'name'],
 		},
@@ -98,6 +146,65 @@ export const taskSchemas = {
 				},
 				...priorityProperty,
 				...isoDateProperties,
+				assignee_zpuid: {
+					type: 'string',
+					description: 'Assignee user ZPUID (optional - get from list_users)',
+				},
+				status: {
+					type: 'object',
+					description: 'Task status details as JSON object with id field',
+				},
+				duration: {
+					type: 'object',
+					description:
+						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3", "type": "hours"}',
+				},
+				completion_percentage: {
+					type: 'number',
+					description: 'Task completion percentage (0-100)',
+				},
+				billing_type: {
+					type: 'string',
+					description: 'Billing type for the task',
+					enum: ['none', 'billable', 'non_billable'],
+				},
+				attachments: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Array of file attachment IDs (max 10 items)',
+				},
+				owners_and_work: {
+					type: 'object',
+					description:
+						'Task owner name and work details as JSON object. Contains owners array with zpuid and work_values for each owner.',
+				},
+				tags: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Array of tags for the task',
+				},
+				teams: {
+					type: 'array',
+					items: { type: 'object' },
+					description: 'Array of team objects to add or remove from the task',
+				},
+				recurrence: {
+					type: 'object',
+					description: 'Recurrence details of the task as JSON object',
+				},
+				reminder: {
+					type: 'object',
+					description: 'Reminder details of the task as JSON object',
+				},
+				budget_info: {
+					type: 'object',
+					description:
+						'Budget details of the task as JSON object. Can include fields like budget, revenue_budget, threshold, exchange_rate.',
+				},
+				remove_dependency_lag: {
+					type: 'boolean',
+					description: 'Set to true to forcefully remove dependency lag',
+				},
 			},
 			required: ['project_id', 'task_id'],
 		},

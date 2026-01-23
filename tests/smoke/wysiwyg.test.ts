@@ -95,6 +95,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Headers & Paragraphs ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
+			duration: { value: '2', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -131,6 +132,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Text Formatting ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'medium',
+			duration: { value: '3', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -173,6 +175,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Lists ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'low',
+			duration: { value: '1', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -216,11 +219,19 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
             exactly.</pre>
 		`;
 
+		const startDate4 = new Date();
+		startDate4.setDate(startDate4.getDate() + 2);
+		const endDate4 = new Date(startDate4);
+		endDate4.setDate(endDate4.getDate() + 5);
+
 		const response = await callTool(client, 'create_task', {
 			project_id: projectId,
 			name: `WYSIWYG Test: Code & Preformatted ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
+			duration: { value: '4', type: 'hours' },
+			start_date: startDate4.toISOString(),
+			end_date: endDate4.toISOString(),
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -268,6 +279,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Nested Lists ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'medium',
+			duration: { value: '2', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -331,11 +343,19 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			<p><strong>Note:</strong> Make sure to test all edge cases before deployment.</p>
 		`;
 
+		const startDate6 = new Date();
+		startDate6.setDate(startDate6.getDate() + 5);
+		const endDate6 = new Date(startDate6);
+		endDate6.setDate(endDate6.getDate() + 7);
+
 		const response = await callTool(client, 'create_task', {
 			project_id: projectId,
 			name: `WYSIWYG Test: Mixed Complex Formatting ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
+			duration: { value: '6', type: 'hours' },
+			start_date: startDate6.toISOString(),
+			end_date: endDate6.toISOString(),
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -429,11 +449,19 @@ async function testWYSIWYGLinksTablesImages(
 			<p><strong>Note:</strong> Images are loaded from picsum.photos and tables support full HTML styling.</p>
 		`;
 
+		const startDate7 = new Date();
+		startDate7.setDate(startDate7.getDate() + 1);
+		const endDate7 = new Date(startDate7);
+		endDate7.setDate(endDate7.getDate() + 4);
+
 		const response = await callTool(client, 'create_task', {
 			project_id: projectId,
 			name: `WYSIWYG Test: Links, Tables & Images ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
+			duration: { value: '5', type: 'hours' },
+			start_date: startDate7.toISOString(),
+			end_date: endDate7.toISOString(),
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
