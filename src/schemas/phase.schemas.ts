@@ -85,11 +85,11 @@ export const phaseSchemas = {
 				},
 				start_date: {
 					type: 'string',
-					description: 'Start date (YYYY-MM-DD format)',
+					description: 'Start date (MM/DD/YYYY format e.g., 12/30/2023)',
 				},
 				end_date: {
 					type: 'string',
-					description: 'End date (YYYY-MM-DD format)',
+					description: 'End date (MM/DD/YYYY format e.g., 12/31/2023)',
 				},
 				owner_zpuid: {
 					type: 'string',
@@ -157,11 +157,11 @@ export const phaseSchemas = {
 				},
 				start_date: {
 					type: 'string',
-					description: 'Start date (YYYY-MM-DD format)',
+					description: 'Start date (MM/DD/YYYY format e.g., 12/30/2023)',
 				},
 				end_date: {
 					type: 'string',
-					description: 'End date (YYYY-MM-DD format)',
+					description: 'End date (MM/DD/YYYY format e.g., 12/31/2023)',
 				},
 				owner_zpuid: {
 					type: 'string',
