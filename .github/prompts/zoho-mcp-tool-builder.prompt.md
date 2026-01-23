@@ -74,6 +74,11 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
    - Create two lists:
      - **Missing Tools**: Tools in documentation but not implemented
      - **Inconsistent Tools**: Tools with incorrect parameters, descriptions, or implementation
+   - For each existing tool, compare documented parameters against schema definitions:
+     - Verify all documented parameters are present in the schema
+     - Check for extra parameters in schema not in documentation
+     - Validate parameter types match documentation
+     - Confirm required vs optional parameters alignment
    - **Use the `todo` tool to create a checklist** of all tools to be created or updated
    - Present the analysis to the user with:
 
@@ -124,6 +129,13 @@ Follow these steps sequentially to implement or update Zoho Projects MCP tools:
      - Include examples where helpful
      - Note any constraints or formats (e.g., "YYYY-MM-DD", "ISO 8601")
      - Reference other tools if IDs are needed (e.g., "obtain from list_projects")
+   - **Validate parameter completeness**:
+     - Cross-reference schema with API documentation
+     - Verify EVERY parameter from documentation is defined in schema
+     - Check that no documented parameters are missing
+     - Ensure parameter types match documentation specifications
+     - Confirm required vs optional designation matches documentation
+     - If documentation shows a parameter, it MUST be in the schema
 
 7. **Update Handler File**
    - For each missing or inconsistent tool, create or update the handler method
