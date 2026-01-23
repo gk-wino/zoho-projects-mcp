@@ -21,6 +21,7 @@
         "test:smoke:project": "npm run build && npx tsx tests/smoke/project.test.ts",
         "test:smoke:task": "npm run build && npx tsx tests/smoke/task.test.ts",
         "test:smoke:tasklist": "npm run build && npx tsx tests/smoke/tasklist.test.ts",
+        "test:smoke:user": "npm run build && npx tsx tests/smoke/user.test.ts",
         "test:smoke:wysiwyg": "npm run build && npx tsx tests/smoke/wysiwyg.test.ts",
         "inspect:task": "npm run build && npx tsx tests/smoke/inspect-task.test.ts",
         "setup": "bash setup.sh"

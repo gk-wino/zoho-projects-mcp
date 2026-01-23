@@ -13,6 +13,7 @@ tests/smoke/
 ├── task.test.ts         # Task functionality tests
 ├── tasklist.test.ts     # Task List functionality tests
 ├── issue.test.ts        # Issue (Bug) functionality tests
+├── user.test.ts         # User functionality tests
 ├── wysiwyg.test.ts      # WYSIWYG editor formatting tests
 ├── inspect-task.test.ts # Task inspector utility (for debugging HTML)
 └── README.md            # This file
@@ -999,6 +1000,173 @@ Retrieved issue followers
    - Depends on
 
 4. **Permissions**: Some operations (like adding followers or resolutions) may require specific permissions in Zoho Projects.
+
+## User Smoke Tests
+
+Tests in `user.test.ts`:
+
+### 1. List Users - Portal Level (`list_users`)
+
+- Calls `list_users` tool with portal ID
+- Retrieves paginated list of users at portal level
+- Validates response contains users array
+- Logs user details including:
+  - Full name
+  - Email address
+  - ZPUID (Zoho Projects User ID)
+- Returns user list for subsequent tests
+
+### 2. Get User Details (`get_user_details`)
+
+- Retrieves detailed information for a specific user
+- Takes portal ID and user ID (ZPUID)
+- Validates response contains user details
+- Logs comprehensive user information:
+  - Full name and email
+  - ZPUID
+  - Active/Inactive status
+  - Role (e.g., Administrator, Employee)
+  - Profile (e.g., Portal Owner, Manager)
+
+### 3. Get User Projects (`get_user_projects`)
+
+- Lists all projects for a specific user
+- Takes portal ID and user ID
+- Supports optional pagination (page, per_page)
+- Validates response contains projects array
+- Logs project information:
+  - Project name and status
+  - Project ID
+  - User's role in each project
+
+### 4. Get Project Users (`get_project_users`)
+
+- Lists all users within a specific project
+- Takes portal ID and project ID
+- Supports pagination and filtering
+- Validates response contains users array
+- Logs user information:
+  - Full name and email
+  - ZPUID
+  - Role within the project
+
+### 5. Get Project User Details (`get_project_user_details`)
+
+- Retrieves detailed information for a user within a project context
+- Takes portal ID, project ID, and user ID
+- Provides project-specific user details including:
+  - User's role in the project
+  - Profile permissions
+  - Email and ZPUID
+
+### 6. Get User License Details (`get_user_license_details`)
+
+- Retrieves license usage information for the portal
+- Takes only portal ID
+- Returns license allocation for different user types:
+  - Portal Users (full access)
+  - Client Users (external collaborators)
+  - Lite Users (limited access)
+  - Readonly Users (view-only access)
+- For each type, shows:
+  - Total count (licensed)
+  - Used count (currently active)
+  - Remaining count (available slots)
+
+### Run User Tests
+
+```bash
+npm run test:smoke:user
+```
+
+### Expected Output (User Tests)
+
+```
+🚀 Starting User Smoke Tests
+
+✅ Environment loaded
+✅ Connected to MCP server
+✅ Using portal ID: 753397720
+
+============================================================
+🧪 TEST: list_users (portal-level)
+============================================================
+
+✓ Found 10 users
+  Sample user: eric.nyaga (eric.nyaga@volane.com)
+  ZPUID: 1817452000000037003
+✅ PASSED: list_users (portal-level)
+
+============================================================
+🧪 TEST: get_user_details
+============================================================
+
+✓ User: eric.nyaga
+  Email: eric.nyaga@volane.com
+  ZPUID: 1817452000000037003
+  Status: Active
+  Role: Administrator
+  Profile: Portal Owner
+✅ PASSED: get_user_details
+
+============================================================
+🧪 TEST: get_user_projects
+============================================================
+
+✓ Found 33 projects for user
+  Sample project: PRODUCTION ISSUES RESOLUTION TRACKER (Status: active)
+  Project ID: 1817452000002248968
+✅ PASSED: get_user_projects
+
+============================================================
+🧪 TEST: get_project_users
+============================================================
+
+✓ Found 10 users in project
+  Sample user: eric.nyaga (eric.nyaga@volane.com)
+  ZPUID: 1817452000000037003
+✅ PASSED: get_project_users
+
+============================================================
+🧪 TEST: get_project_user_details
+============================================================
+
+✓ User in project: eric.nyaga
+  Email: eric.nyaga@volane.com
+  ZPUID: 1817452000000037003
+  Role: Administrator
+  Profile: Portal Owner
+✅ PASSED: get_project_user_details
+
+============================================================
+🧪 TEST: get_user_license_details
+============================================================
+
+✓ License Details:
+  Portal Users: 40/40 (0 remaining)
+  Readonly Users: 9/20 (11 remaining)
+✅ PASSED: get_user_license_details
+
+============================================================
+✨ All User Smoke Tests Passed!
+============================================================
+```
+
+### Important Notes (User Tests)
+
+1. **READ-Only Operations**: All user tools implement READ-only operations in accordance with the `ZohoProjects.users.READ` scope. No create, update, or delete operations are supported.
+
+2. **ZPUID vs Email**: User identification can be done using ZPUID (Zoho Projects User ID) or email address. The API typically returns ZPUID which should be used for subsequent calls.
+
+3. **Portal vs Project Context**: Users can be retrieved at portal level (all users) or project level (users assigned to a specific project). Project-level queries provide additional role information specific to that project.
+
+4. **License Types**:
+   - **Portal Users**: Full access to all features
+   - **Client Users**: External collaborators with limited access
+   - **Lite Users**: Internal users with restricted features
+   - **Readonly Users**: View-only access to projects
+
+5. **Pagination**: The `list_users` and `get_user_projects` tools support pagination. Default is 10 items per page, which can be customized using `page` and `per_page` parameters.
 
 ## Expected Output
 

@@ -378,13 +378,17 @@ class ZohoProjectsServer {
 
 					// Users
 					case 'list_users':
-						return await this.handlers.users.listUsers(params.project_id);
-
-					// Teams
-					case 'get_team_details':
-						return await this.handlers.teams.getTeamDetails(params);
-					case 'get_projects_team':
-						return await this.handlers.teams.getProjectsTeam(params);
+						return await this.handlers.users.listUsers(params);
+					case 'get_user_details':
+						return await this.handlers.users.getUserDetails(params);
+					case 'get_user_projects':
+						return await this.handlers.users.getUserProjects(params);
+					case 'get_project_users':
+						return await this.handlers.users.getProjectUsers(params);
+					case 'get_project_user_details':
+						return await this.handlers.users.getProjectUserDetails(params);
+					case 'get_user_license_details':
+						return await this.handlers.users.getUserLicenseDetails(params);
 					case 'get_team_users':
 						return await this.handlers.teams.getTeamUsers(params);
 					case 'get_teams_projects':
