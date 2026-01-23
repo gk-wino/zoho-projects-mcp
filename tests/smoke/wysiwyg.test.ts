@@ -95,7 +95,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Headers & Paragraphs ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
-			duration: { value: '2', type: 'hours' },
+			duration: { value: '2:00', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -132,7 +132,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Text Formatting ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'medium',
-			duration: { value: '3', type: 'hours' },
+			duration: { value: '3:00', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -175,7 +175,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Lists ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'low',
-			duration: { value: '1', type: 'hours' },
+			duration: { value: '1:00', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -229,7 +229,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Code & Preformatted ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
-			duration: { value: '4', type: 'hours' },
+			duration: { value: '4:00', type: 'hours' },
 			start_date: startDate4.toISOString(),
 			end_date: endDate4.toISOString(),
 		});
@@ -279,7 +279,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Nested Lists ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'medium',
-			duration: { value: '2', type: 'hours' },
+			duration: { value: '2:00', type: 'hours' },
 		});
 		let data = parseToolResponse(response);
 		if (typeof data === 'string') {
@@ -353,7 +353,7 @@ async function testWYSIWYGFormatting(client: Client, projectId: string) {
 			name: `WYSIWYG Test: Mixed Complex Formatting ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
-			duration: { value: '6', type: 'hours' },
+			duration: { value: '6:00', type: 'hours' },
 			start_date: startDate6.toISOString(),
 			end_date: endDate6.toISOString(),
 		});
@@ -459,7 +459,7 @@ async function testWYSIWYGLinksTablesImages(
 			name: `WYSIWYG Test: Links, Tables & Images ${Date.now()}`,
 			description: htmlDescription,
 			priority: 'high',
-			duration: { value: '5', type: 'hours' },
+			duration: { value: '5', type: 'days' },
 			start_date: startDate7.toISOString(),
 			end_date: endDate7.toISOString(),
 		});

@@ -74,7 +74,7 @@ export const taskSchemas = {
 				duration: {
 					type: 'object',
 					description:
-						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3", "type": "hours"}',
+						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3:00", "type": "hours"}',
 				},
 				completion_percentage: {
 					type: 'number',
@@ -157,7 +157,7 @@ export const taskSchemas = {
 				duration: {
 					type: 'object',
 					description:
-						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3", "type": "hours"}',
+						'Task duration as JSON object with value and type fields. Example: {"value": "5", "type": "days"} or {"value": "3:00", "type": "hours"}',
 				},
 				completion_percentage: {
 					type: 'number',
