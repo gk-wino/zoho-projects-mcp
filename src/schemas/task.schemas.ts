@@ -9,13 +9,13 @@ import {
 export const taskSchemas = {
 	list_tasks: {
 		name: 'list_tasks',
-		description: 'List tasks from a project or portal',
+		description: 'List tasks from a project or portal. Use `project_id` to scope the task list to one project, or omit it for portal-level task listing when that behavior is supported. All parameters are optional.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (optional for portal-level)',
+					description: 'Project ID when you want to limit the task list to one project. Omit it for portal-level task listing when supported.',
 				},
 				...paginationProperties,
 			},
@@ -23,12 +23,12 @@ export const taskSchemas = {
 	},
 	get_task: {
 		name: 'get_task',
-		description: 'Get details of a specific task',
+		description: 'Get details of a specific task. Use this when you already know the parent record or identifier and need the returned details or related records. Required: `project_id`, `task_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				...projectIdProperty,
-				task_id: { type: 'string', description: 'Task ID' },
+				task_id: { type: 'string', description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.' },
 			},
 			required: ['project_id', 'task_id'],
 		},
@@ -36,25 +36,25 @@ export const taskSchemas = {
 	create_task: {
 		name: 'create_task',
 		description:
-			'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists. To create a subtask, provide parent_task_id.',
+			'Create a new task in a project task list. Tasks must be created within a task list. If tasklist_id is not provided, the general/default task list will be used (if it exists). Use create_default_tasklist first if no default task list exists. To create a subtask, provide parent_task_id. Use this to create a new record or association once you already have the required parent identifiers and payload values. Formats: `start_date`, `end_date` use ISO 8601; `duration` may require HH:MM when using hour-based duration. Required: `project_id`, `name`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID where the task will be created. Obtain from `list_projects`.',
 				},
 				tasklist_id: {
 					type: 'string',
 					description:
-						'Task list ID (optional - uses general/default task list if not provided. Get from list_tasklists)',
+						'Task list ID where the task will be created. If omitted, Zoho uses the general or default task list when available.',
 				},
 				parent_task_id: {
 					type: 'string',
 					description:
-						'Parent task ID (optional - provide this to create a subtask under an existing task. Get from list_tasks or get_task)',
+						'Parent task ID when creating a subtask.',
 				},
-				name: { type: 'string', description: 'Task name (required)' },
+				name: { type: 'string', description: 'Task name to create.' },
 				description: {
 					type: 'string',
 					description:
@@ -64,12 +64,12 @@ export const taskSchemas = {
 				...isoDateProperties,
 				assignee_zpuid: {
 					type: 'string',
-					description: 'Assignee user ZPUID (optional - get from list_users)',
+					description: 'Assignee user ZPUID for the task.',
 				},
 				status: {
 					type: 'object',
 					description:
-						'Task status details as JSON object with id field (optional - if not provided default open status will be used)',
+						'Task status object, typically with an `id` field.',
 				},
 				duration: {
 					type: 'object',
@@ -78,36 +78,36 @@ export const taskSchemas = {
 				},
 				completion_percentage: {
 					type: 'number',
-					description: 'Task completion percentage (0-100)',
+					description: 'Task completion percentage (0-100).',
 				},
 				billing_type: {
 					type: 'string',
-					description: 'Billing type for the task',
+					description: 'Billing type for the task. Allowed values: `none`, `billable`, `non_billable`.',
 					enum: ['none', 'billable', 'non_billable'],
 				},
 				attachments: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Array of file attachment IDs (max 10 items)',
+					description: 'Array of file attachment IDs to associate with the task (maximum 10 items).',
 				},
 				owners_and_work: {
 					type: 'object',
 					description:
-						'Task owner name and work details as JSON object. Contains owners array with zpuid and work_values for each owner.',
+						'Owner and work allocation object for the task, including owner ZPUIDs and work values.',
 				},
 				tags: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Array of tags for the task',
+					description: 'Array of tags for the task.',
 				},
 				teams: {
 					type: 'array',
 					items: { type: 'object' },
-					description: 'Array of team objects to associate with the task',
+					description: 'Array of team objects to associate with the task.',
 				},
 				recurrence: {
 					type: 'object',
-					description: 'Recurrence details of the task as JSON object',
+					description: 'Recurrence details of the task as JSON object.',
 				},
 				budget_info: {
 					type: 'object',
@@ -121,23 +121,23 @@ export const taskSchemas = {
 	update_task: {
 		name: 'update_task',
 		description:
-			'Update a task properties. You can also move a task to a different task list by providing tasklist_id.',
+			'Update a task properties. You can also move a task to a different task list by providing tasklist_id. Use this to modify an existing record or state transition; include only the fields you want to change unless the schema marks them as required. Formats: `start_date`, `end_date` use ISO 8601; `duration` may require HH:MM when using hour-based duration. Required: `project_id`, `task_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				...projectIdProperty,
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				tasklist_id: {
 					type: 'string',
 					description:
-						'Task list ID (optional - only provide if moving task to different task list. Get from list_tasklists)',
+						'Task list ID when moving the task to a different task list.',
 				},
 				name: {
 					type: 'string',
-					description: 'Task name (optional - only if updating)',
+					description: 'Updated task name.',
 				},
 				description: {
 					type: 'string',
@@ -148,11 +148,11 @@ export const taskSchemas = {
 				...isoDateProperties,
 				assignee_zpuid: {
 					type: 'string',
-					description: 'Assignee user ZPUID (optional - get from list_users)',
+					description: 'Updated assignee user ZPUID for the task.',
 				},
 				status: {
 					type: 'object',
-					description: 'Task status details as JSON object with id field',
+					description: 'Updated task status object, typically with an `id` field.',
 				},
 				duration: {
 					type: 'object',
@@ -161,40 +161,40 @@ export const taskSchemas = {
 				},
 				completion_percentage: {
 					type: 'number',
-					description: 'Task completion percentage (0-100)',
+					description: 'Task completion percentage (0-100).',
 				},
 				billing_type: {
 					type: 'string',
-					description: 'Billing type for the task',
+					description: 'Billing type for the task. Allowed values: `none`, `billable`, `non_billable`.',
 					enum: ['none', 'billable', 'non_billable'],
 				},
 				attachments: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Array of file attachment IDs (max 10 items)',
+					description: 'Array of file attachment IDs to associate with the task (maximum 10 items).',
 				},
 				owners_and_work: {
 					type: 'object',
 					description:
-						'Task owner name and work details as JSON object. Contains owners array with zpuid and work_values for each owner.',
+						'Updated owner and work allocation object for the task.',
 				},
 				tags: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Array of tags for the task',
+					description: 'Array of tags for the task.',
 				},
 				teams: {
 					type: 'array',
 					items: { type: 'object' },
-					description: 'Array of team objects to add or remove from the task',
+					description: 'Array of team objects to add or remove from the task.',
 				},
 				recurrence: {
 					type: 'object',
-					description: 'Recurrence details of the task as JSON object',
+					description: 'Recurrence details of the task as JSON object.',
 				},
 				reminder: {
 					type: 'object',
-					description: 'Reminder details of the task as JSON object',
+					description: 'Reminder configuration object for the task.',
 				},
 				budget_info: {
 					type: 'object',
@@ -203,7 +203,7 @@ export const taskSchemas = {
 				},
 				remove_dependency_lag: {
 					type: 'boolean',
-					description: 'Set to true to forcefully remove dependency lag',
+					description: 'Set to true to forcefully remove dependency lag.',
 				},
 			},
 			required: ['project_id', 'task_id'],
@@ -211,12 +211,12 @@ export const taskSchemas = {
 	},
 	delete_task: {
 		name: 'delete_task',
-		description: 'Delete a task',
+		description: 'Delete a task. Use this only when you intend to remove the record, comment, follower, attachment, or association identified by the required parameters. Required: `project_id`, `task_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				...projectIdProperty,
-				task_id: { type: 'string', description: 'Task ID' },
+				task_id: { type: 'string', description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.' },
 			},
 			required: ['project_id', 'task_id'],
 		},
@@ -224,21 +224,21 @@ export const taskSchemas = {
 	clone_task: {
 		name: 'clone_task',
 		description:
-			'Clone a task to create multiple instances within the same project. Each cloned instance will have the same properties as the original task.',
+			'Clone a task to create multiple instances within the same project. Each cloned instance will have the same properties as the original task. Use this to manage relationships, duplication, movement, or follow state between existing records. Required: `project_id`, `task_id`, `no_of_instances`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID to clone (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				no_of_instances: {
 					type: 'number',
-					description: 'Number of task instances to create (must be at least 1)',
+					description: 'Number of task instances to create (must be at least 1).',
 					default: 1,
 				},
 			},
@@ -248,21 +248,21 @@ export const taskSchemas = {
 	move_task: {
 		name: 'move_task',
 		description:
-			'Move a task to a different task list within the same project. This requires the target task list ID and optional status mapping.',
+			'Move a task to a different task list within the same project. This requires the target task list ID and optional status mapping. Use this to manage relationships, duplication, movement, or follow state between existing records. Required: `project_id`, `task_id`, `target_tasklist_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID to move (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				target_tasklist_id: {
 					type: 'string',
-					description: 'Target task list ID where task will be moved (obtain from list_tasklists)',
+					description: 'Target task list ID where the task should be moved.',
 				},
 			},
 			required: ['project_id', 'task_id', 'target_tasklist_id'],
@@ -270,17 +270,17 @@ export const taskSchemas = {
 	},
 	get_associated_bugs: {
 		name: 'get_associated_bugs',
-		description: 'Get all bugs/issues associated with a specific task',
+		description: 'Get all bugs/issues associated with a specific task. Use this when you already know the parent record or identifier and need the returned details or related records. Required: `project_id`, `task_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 			},
 			required: ['project_id', 'task_id'],
@@ -289,23 +289,23 @@ export const taskSchemas = {
 	associate_bugs: {
 		name: 'associate_bugs',
 		description:
-			'Associate one or more bugs/issues with a task. This creates a link between the task and the specified bugs.',
+			'Associate one or more bugs/issues with a task. This creates a link between the task and the specified bugs. Use this to manage relationships, duplication, movement, or follow state between existing records. Required: `project_id`, `task_id`, `bug_ids`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				bug_ids: {
 					type: 'array',
 					items: { type: 'string' },
 					description:
-						'Array of bug/issue IDs to associate with the task (obtain from list_issues)',
+						'Array of issue IDs to associate with the task.',
 				},
 			},
 			required: ['project_id', 'task_id', 'bug_ids'],
@@ -314,22 +314,22 @@ export const taskSchemas = {
 	disassociate_bug: {
 		name: 'disassociate_bug',
 		description:
-			'Remove the association between a task and a bug/issue. This breaks the link but does not delete the bug.',
+			'Remove the association between a task and a bug/issue. This breaks the link but does not delete the bug. Use this when the returned action or record matches the identifiers and filters you already have available. Required: `project_id`, `task_id`, `bug_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				bug_id: {
 					type: 'string',
 					description:
-						'Bug/Issue ID to disassociate from the task (obtain from get_associated_bugs)',
+						'Issue ID to remove from the task association list.',
 				},
 			},
 			required: ['project_id', 'task_id', 'bug_id'],
@@ -337,31 +337,31 @@ export const taskSchemas = {
 	},
 	list_task_comments: {
 		name: 'list_task_comments',
-		description: 'Get all comments for a specific task',
+		description: 'Get all comments for a specific task. Use this to browse matching records and collect identifiers for follow-up detail or mutation tools. Required: `project_id`, `task_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				page: {
 					type: 'number',
-					description: 'Page number for pagination',
+					description: 'Page number for pagination (1-based; default: 1).',
 					default: 1,
 				},
 				per_page: {
 					type: 'number',
-					description: 'Number of comments per page',
+					description: 'Maximum number of records to return per page for pagination.',
 					default: 10,
 				},
 				sort_by: {
 					type: 'string',
-					description: 'Sort order for comments (e.g., "created_time" or "modified_time")',
+					description: 'Comment sort field, for example `created_time` or `modified_time`.',
 				},
 			},
 			required: ['project_id', 'task_id'],
@@ -369,27 +369,27 @@ export const taskSchemas = {
 	},
 	add_task_comment: {
 		name: 'add_task_comment',
-		description: 'Add a new comment to a task',
+		description: 'Add a new comment to a task. Use this to create a new record or association once you already have the required parent identifiers and payload values. Required: `project_id`, `task_id`, `comment`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				comment: {
 					type: 'string',
 					description:
-						'The comment text/content to add. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
+						'Comment text to create or update.',
 				},
 				attachments: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Optional array of attachment IDs',
+					description: 'Array of attachment IDs to associate with the new task comment.',
 				},
 			},
 			required: ['project_id', 'task_id', 'comment'],
@@ -397,31 +397,31 @@ export const taskSchemas = {
 	},
 	update_task_comment: {
 		name: 'update_task_comment',
-		description: 'Update an existing task comment',
+		description: 'Update an existing task comment. Use this to modify an existing record or state transition; include only the fields you want to change unless the schema marks them as required. Required: `project_id`, `task_id`, `comment_id`, `comment`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				comment_id: {
 					type: 'string',
-					description: 'Comment ID to update (obtain from list_task_comments)',
+					description: 'Comment ID. Obtain from the relevant list-comments tool.',
 				},
 				comment: {
 					type: 'string',
 					description:
-						'The updated comment text/content. Supports HTML/WYSIWYG formatting: headers, text styles (bold/italic/underline), colors, lists, code blocks, links, tables, images. Use <p><br/></p> for spacing between sections. See docs/wysiwyg.md for complete formatting guide.',
+						'Comment text to create or update.',
 				},
 				attachments: {
 					type: 'array',
 					items: { type: 'string' },
-					description: 'Optional array of attachment IDs',
+					description: 'Array of attachment IDs to associate with the updated task comment.',
 				},
 			},
 			required: ['project_id', 'task_id', 'comment_id', 'comment'],
@@ -429,21 +429,21 @@ export const taskSchemas = {
 	},
 	delete_task_comment: {
 		name: 'delete_task_comment',
-		description: 'Delete a task comment',
+		description: 'Delete a task comment. Use this only when you intend to remove the record, comment, follower, attachment, or association identified by the required parameters. Required: `project_id`, `task_id`, `comment_id`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				project_id: {
 					type: 'string',
-					description: 'Project ID (obtain from list_projects)',
+					description: 'Project ID. Obtain from `list_projects`.',
 				},
 				task_id: {
 					type: 'string',
-					description: 'Task ID (obtain from list_tasks or get_task)',
+					description: 'Task ID. Obtain from `list_tasks` or the relevant detail tool.',
 				},
 				comment_id: {
 					type: 'string',
-					description: 'Comment ID to delete (obtain from list_task_comments)',
+					description: 'Comment ID. Obtain from the relevant list-comments tool.',
 				},
 			},
 			required: ['project_id', 'task_id', 'comment_id'],

@@ -3,7 +3,7 @@ import { paginationProperties, projectIdProperty, dateRangeProperties } from './
 const moduleTypeProperty = {
 	module_type: {
 		type: 'string',
-		description: 'Time log module type',
+		description: 'Time log module type. Allowed values: `task`, `issue`, `general`.',
 		enum: ['task', 'issue', 'general'],
 	},
 } as const;
@@ -11,110 +11,110 @@ const moduleTypeProperty = {
 const moduleIdProperty = {
 	module_id: {
 		type: 'string',
-		description: 'Task or issue ID associated with the time log; required unless module_type is general',
+		description: 'Task or issue ID associated with the time log; required unless module_type is general.',
 	},
 } as const;
 
 const logIdProperty = {
 	log_id: {
 		type: 'string',
-		description: 'Time log ID',
+		description: 'Time log ID. Obtain from `list_time_logs`, `get_time_log`, or timer detail lookup.',
 	},
 } as const;
 
 const timeLogCoreProperties = {
 	log_name: {
 		type: 'string',
-		description: 'Name of the time log',
+		description: 'Name of the time log.',
 	},
 	date: {
 		type: 'string',
-		description: 'Time log date in YYYY-MM-DD format',
+		description: 'Time log date in YYYY-MM-DD format.',
 	},
 	bill_status: {
 		type: 'string',
-		description: 'Billing status of the time log',
+		description: 'Billing status of the time log. Allowed values: `Billable`, `Non Billable`.',
 		enum: ['Billable', 'Non Billable'],
 	},
 	hours: {
 		type: 'string',
-		description: 'Logged hours value',
+		description: 'Logged hours value.',
 	},
 	notes: {
 		type: 'string',
-		description: 'Additional notes for the time log',
+		description: 'Additional notes for the time log.',
 	},
 	owner_zpuid: {
 		type: 'string',
-		description: 'Owner ZPUID for the time log',
+		description: 'Owner ZPUID for the time log.',
 	},
 	approver: {
 		type: 'string',
-		description: 'Approver ZPUID for the time log',
+		description: 'Approver ZPUID for the time log.',
 	},
 	start_time: {
 		type: 'string',
-		description: 'Start time for the time log',
+		description: 'Start time in the format accepted by Zoho.',
 	},
 	end_time: {
 		type: 'string',
-		description: 'End time for the time log',
+		description: 'End time in the format accepted by Zoho.',
 	},
 	status: {
 		type: 'string',
-		description: 'Approval status of the time log',
+		description: 'Approval status of the time log. Allowed values: `Approved`, `Unapproved`, `Rejected`.',
 		enum: ['Approved', 'Unapproved', 'Rejected'],
 	},
 	cost_rate_per_hour: {
 		type: 'number',
-		description: 'Cost rate per hour',
+		description: 'Cost rate per hour.',
 	},
 	for_timer: {
 		type: 'boolean',
-		description: 'Whether this time log originated from a timer',
+		description: 'Whether this time log originated from a timer.',
 	},
 	cf_number: {
 		type: 'number',
-		description: 'Numeric custom field value',
+		description: 'Numeric custom field value.',
 	},
 	cf_user_picklist: {
 		type: 'string',
-		description: 'User picklist custom field value',
+		description: 'User picklist custom field value.',
 	},
 	cf_single_line: {
 		type: 'string',
-		description: 'Single-line custom field value',
+		description: 'Single-line custom field value.',
 	},
 	cf_multi_line: {
 		type: 'string',
-		description: 'Multi-line custom field value',
+		description: 'Multi-line custom field value.',
 	},
 	cf_email: {
 		type: 'string',
-		description: 'Email custom field value',
+		description: 'Email custom field value.',
 	},
 	cf_date: {
 		type: 'string',
-		description: 'Date custom field value',
+		description: 'Date custom field value.',
 	},
 	cf_decimal: {
 		type: 'string',
-		description: 'Decimal custom field value',
+		description: 'Decimal custom field value.',
 	},
 	cf_check_box: {
 		type: 'string',
-		description: 'Checkbox custom field value',
+		description: 'Checkbox custom field value.',
 	},
 	sprints_logid: {
 		type: 'string',
-		description: 'Zoho Sprints log ID',
+		description: 'Zoho Sprints log ID.',
 	},
 } as const;
 
 export const timeLogSchemas = {
 	list_time_logs: {
 		name: 'list_time_logs',
-		description: 'List time logs for a project timesheet view',
+		description: 'List time logs for a project timesheet view. Use this to inspect project timesheet entries, optionally narrowing by date range, module, or pagination. Formats: `start_date`, `end_date` use YYYY-MM-DD. Required: `project_id`, `view_type`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -122,7 +122,7 @@ export const timeLogSchemas = {
 				...paginationProperties,
 				view_type: {
 					type: 'string',
-					description: 'Timesheet view type',
+					description: 'Timesheet view type for the time log list. Allowed values: `day`, `week`, `month`, `customdate`.',
 					enum: ['day', 'week', 'month', 'customdate'],
 				},
 				...dateRangeProperties,
@@ -130,7 +130,7 @@ export const timeLogSchemas = {
 				...moduleIdProperty,
 				fetch_by_modified_time: {
 					type: 'boolean',
-					description: 'Filter by modified date instead of start date',
+					description: 'Filter by modified date instead of start date.',
 				},
 			},
 			required: ['project_id', 'view_type'],
@@ -138,7 +138,7 @@ export const timeLogSchemas = {
 	},
 	get_time_log: {
 		name: 'get_time_log',
-		description: 'Get details of a specific time log',
+		description: 'Get details of a specific time log. Use this when you already know the parent record or identifier and need the returned details or related records. Required: `project_id`, `log_id`, `module_type`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -151,7 +151,7 @@ export const timeLogSchemas = {
 	},
 	create_time_log: {
 		name: 'create_time_log',
-		description: 'Create a new time log entry in a project timesheet',
+		description: 'Create a new time log entry in a project timesheet. Use this to create a new record or association once you already have the required parent identifiers and payload values. Formats: `date` uses YYYY-MM-DD; `hours` may use HH:MM when required by Zoho. Required: `project_id`, `module_type`, `date`, `bill_status`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -165,7 +165,7 @@ export const timeLogSchemas = {
 	},
 	update_time_log: {
 		name: 'update_time_log',
-		description: 'Update an existing time log entry',
+		description: 'Update an existing time log entry. Use this to modify an existing record or state transition; include only the fields you want to change unless the schema marks them as required. Formats: `date` uses YYYY-MM-DD when provided; `hours` may use HH:MM when required by Zoho. Required: `project_id`, `log_id`, `module_type`.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -176,21 +176,21 @@ export const timeLogSchemas = {
 				...timeLogCoreProperties,
 				approval_status: {
 					type: 'string',
-					description: 'Approval status for the time log',
+					description: 'Approval status to apply to the time log. Allowed values: `Approved`, `Unapproved`, `Rejected`.',
 					enum: ['Approved', 'Unapproved', 'Rejected'],
 				},
 				extra_data: {
 					type: 'object',
-					description: 'Additional time entry details',
+					description: 'Additional time entry details.',
 					properties: {
-						start_time: { type: 'string', description: 'Extra entry start time' },
-						end_time: { type: 'string', description: 'Extra entry end time' },
-						notes: { type: 'string', description: 'Extra entry notes' },
+						start_time: { type: 'string', description: 'Updated start time for the time log entry in the format accepted by Zoho.' },
+						end_time: { type: 'string', description: 'Updated end time for the time log entry in the format accepted by Zoho.' },
+						notes: { type: 'string', description: 'Extra entry notes.' },
 					},
 				},
 				is_draft: {
 					type: 'string',
-					description: 'Whether to save the time log as a draft',
+					description: 'Whether to save the updated time log as a draft. Allowed values: `true`, `false`.',
 					enum: ['true', 'false'],
 				},
 			},
@@ -199,7 +199,7 @@ export const timeLogSchemas = {
 	},
 	delete_time_log: {
 		name: 'delete_time_log',
-		description: 'Delete a time log entry',
+		description: 'Delete a time log entry. Use this only when you intend to remove the record, comment, follower, attachment, or association identified by the required parameters. Required: `project_id`, `log_id`, `module_type`.',
 		inputSchema: {
 			type: 'object',
 			properties: {

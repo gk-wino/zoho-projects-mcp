@@ -83,7 +83,7 @@ A Model Context Protocol (MCP) server that provides integration with Zoho Projec
 
    ```
    https://accounts.zoho.{REGION}/oauth/v2/auth?
-     scope=ZohoProjects.portals.ALL,ZohoProjects.projects.ALL,ZohoProjects.tasks.ALL,ZohoProjects.bugs.ALL,ZohoProjects.milestones.ALL,ZohoProjects.users.READ,ZohoProjects.teams.READ,ZohoSearch.securesearch.READ
+     scope=ZohoProjects.portals.ALL,ZohoProjects.projects.ALL,ZohoProjects.tasks.ALL,ZohoProjects.bugs.ALL,ZohoProjects.milestones.ALL,ZohoProjects.users.READ,ZohoProjects.teams.READ,ZohoSearch.securesearch.READ,ZohoProjects.timesheets.ALL
      &client_id=YOUR_CLIENT_ID
      &response_type=code
      &access_type=offline
