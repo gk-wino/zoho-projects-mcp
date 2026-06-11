@@ -16,6 +16,7 @@
         "test": "node test-connection.js",
         "list:projects": "./node_modules/.bin/tsx scripts/list-projects.ts",
         "list:tasks": "./node_modules/.bin/tsx scripts/list-tasks.ts",
+        "list:tasks:email": "./node_modules/.bin/tsx scripts/list-tasks-by-email.ts",
         "debug:timelog": "npm run build && npx tsx scripts/create-timelogs.ts",
         "test:smoke": "npm run build && npx tsx tests/smoke/portal.test.ts",
         "test:smoke:issue": "npm run build && npx tsx tests/smoke/issue.test.ts",
