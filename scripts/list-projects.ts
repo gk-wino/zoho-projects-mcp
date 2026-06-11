@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +26,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.resolve(repoRoot, '.env');
 const serverPath = path.resolve(repoRoot, 'dist', 'index.js');
+export const projectsDataPath = path.resolve(repoRoot, 'data', 'projects.json');
 const requiredEnvVars = ['ZOHO_ACCESS_TOKEN', 'ZOHO_PORTAL_ID'];
 
 function loadEnv(): void {
@@ -131,7 +133,12 @@ export async function listAllProjects(perPage: number = 100): Promise<Project[]>
 	}
 }
 
-export function formatProjectsReport(projects: Project[]): string {
+export async function writeProjectsFile(projects: Project[]): Promise<void> {
+	await fsp.mkdir(path.dirname(projectsDataPath), { recursive: true });
+	await fsp.writeFile(projectsDataPath, `${JSON.stringify(projects, null, 2)}\n`, 'utf8');
+}
+
+export function formatProjectsSummary(projects: Project[]): string {
 	const lines = [`Total projects: ${projects.length}`];
 
 	if (projects.length === 0) {
@@ -150,17 +157,14 @@ export function formatProjectsReport(projects: Project[]): string {
 		}
 	}
 
-	lines.push('');
-	lines.push('Raw JSON:');
-	lines.push(JSON.stringify(projects, null, 2));
-
 	return lines.join('\n');
 }
 
 async function main(): Promise<void> {
 	try {
 		const projects = await listAllProjects();
-		console.log(formatProjectsReport(projects));
+		await writeProjectsFile(projects);
+		console.log(formatProjectsSummary(projects));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		console.error(`Failed to list projects: ${message}`);
