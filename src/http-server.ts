@@ -27,6 +27,7 @@ import {
 	TagHandler,
 	UserHandler,
 	TimeLogHandler,
+	TimerHandler,
 } from './handlers/index.js';
 
 class ZohoProjectsServer {
@@ -44,6 +45,7 @@ class ZohoProjectsServer {
 		tags: TagHandler;
 		users: UserHandler;
 		timelogs: TimeLogHandler;
+		timers: TimerHandler;
 	};
 
 	constructor() {
@@ -75,6 +77,7 @@ class ZohoProjectsServer {
 			tags: new TagHandler(this.client),
 			users: new UserHandler(this.client),
 			timelogs: new TimeLogHandler(this.client),
+			timers: new TimerHandler(this.client),
 		};
 
 		this.setupHandlers();
@@ -170,6 +173,20 @@ class ZohoProjectsServer {
 						return await this.handlers.timelogs.updateTimeLog(params);
 					case 'delete_time_log':
 						return await this.handlers.timelogs.deleteTimeLog(params);
+					case 'get_running_timers':
+						return await this.handlers.timers.getRunningTimers(params);
+					case 'start_timer':
+						return await this.handlers.timers.startTimer(params);
+					case 'get_timer_details_by_log_id':
+						return await this.handlers.timers.getTimerDetailsByLogId(params);
+					case 'pause_timer':
+						return await this.handlers.timers.pauseTimer(params);
+					case 'resume_timer':
+						return await this.handlers.timers.resumeTimer(params);
+					case 'stop_timer':
+						return await this.handlers.timers.stopTimer(params);
+					case 'delete_timer':
+						return await this.handlers.timers.deleteTimer(params.timer_id);
 
 					// Issue operations
 					case 'list_issues':

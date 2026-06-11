@@ -24,6 +24,7 @@
         "test:smoke:portal": "npm run build && npx tsx tests/smoke/portal.test.ts",
         "test:smoke:project": "npm run build && npx tsx tests/smoke/project.test.ts",
         "test:smoke:task": "npm run build && npx tsx tests/smoke/task.test.ts",
+        "test:smoke:timer": "npm run build && npx tsx tests/smoke/timer.test.ts",
         "test:smoke:timelog": "npm run build && npx tsx tests/smoke/timelog.test.ts",
         "test:smoke:tasklist": "npm run build && npx tsx tests/smoke/tasklist.test.ts",
         "test:smoke:user": "npm run build && npx tsx tests/smoke/user.test.ts",

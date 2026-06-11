@@ -9,6 +9,7 @@ import { teamSchemas } from './team.schemas.js';
 import { tagSchemas } from './tag.schemas.js';
 import { userSchemas } from './user.schemas.js';
 import { timeLogSchemas } from './timelog.schemas.js';
+import { timerSchemas } from './timer.schemas.js';
 
 export const allToolSchemas = [
 	...Object.values(portalSchemas),
@@ -22,6 +23,7 @@ export const allToolSchemas = [
 	...Object.values(tagSchemas),
 	...Object.values(userSchemas),
 	...Object.values(timeLogSchemas),
+	...Object.values(timerSchemas),
 ];
 
 export * from './portal.schemas.js';
@@ -35,3 +37,4 @@ export * from './team.schemas.js';
 export * from './tag.schemas.js';
 export * from './user.schemas.js';
 export * from './timelog.schemas.js';
+export * from './timer.schemas.js';
