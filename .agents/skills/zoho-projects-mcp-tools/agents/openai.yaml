@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zoho Projects MCP Tools"
+  short_description: "Quick Zoho Projects MCP tool guide"
+  default_prompt: "Use $zoho-projects-mcp-tools to choose and call the right Zoho Projects MCP tool for this repository."
