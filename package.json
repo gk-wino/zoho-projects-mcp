@@ -14,6 +14,7 @@
         "start:http": "node dist/http-server.js",
         "dev:http": "tsc --watch & node --watch dist/http-server.js",
         "test": "node test-connection.js",
+        "refresh:token": "./node_modules/.bin/tsx scripts/refresh-token.ts",
         "list:projects": "./node_modules/.bin/tsx scripts/list-projects.ts",
         "list:tasks": "./node_modules/.bin/tsx scripts/list-tasks.ts",
         "list:tasks:email": "./node_modules/.bin/tsx scripts/list-tasks-by-email.ts",

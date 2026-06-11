@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import * as dotenv from 'dotenv';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,12 +72,15 @@ type FilteredTasksSummaryData = FilterTasksByEmailWorkResult & {
 };
 
 const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
-const HOURS_PER_DAY = 9.5;
+const DEFAULT_HOURS_PER_DAY = 9.5;
 const DEFAULT_ACCEPTABLE_SHORTFALL_HOURS = 4;
 const EXCLUDED_STATUSES = new Set(['open', 'on hold']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
+const envPath = path.resolve(repoRoot, '.env');
+
+let envLoaded = false;
 
 function requireEmail(email: string): string {
 	const normalizedEmail = email.trim().toLowerCase();
@@ -100,9 +104,18 @@ function resolveInputFilePath(email: string, inputFilePath?: string): string {
 	return getTasksByEmailDataPath(email);
 }
 
-export function parseThresholdHours(value: unknown): number {
-	if (value === undefined) {
-		return DEFAULT_ACCEPTABLE_SHORTFALL_HOURS;
+function loadOptionalEnv(): void {
+	if (envLoaded) {
+		return;
+	}
+
+	dotenv.config({ path: envPath });
+	envLoaded = true;
+}
+
+function parseNonNegativeNumber(value: unknown, fallback: number, label: string): number {
+	if (value === undefined || value === null || value === '') {
+		return fallback;
 	}
 
 	const parsedValue =
@@ -113,10 +126,32 @@ export function parseThresholdHours(value: unknown): number {
 				: Number.NaN;
 
 	if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-		throw new Error('Acceptable shortfall hours must be a non-negative number.');
+		throw new Error(`${label} must be a non-negative number.`);
 	}
 
 	return parsedValue;
+}
+
+function getConfiguredHoursPerDay(): number {
+	loadOptionalEnv();
+	return parseNonNegativeNumber(process.env.HOURS_PER_DAY, DEFAULT_HOURS_PER_DAY, 'HOURS_PER_DAY');
+}
+
+function getConfiguredAcceptableShortfallHours(): number {
+	loadOptionalEnv();
+	return parseNonNegativeNumber(
+		process.env.ACCEPTABLE_SHORTFALL_HOURS,
+		DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+		'ACCEPTABLE_SHORTFALL_HOURS',
+	);
+}
+
+export function parseThresholdHours(value: unknown): number {
+	if (value === undefined) {
+		return getConfiguredAcceptableShortfallHours();
+	}
+
+	return parseNonNegativeNumber(value, DEFAULT_ACCEPTABLE_SHORTFALL_HOURS, 'Acceptable shortfall hours');
 }
 
 function getSiblingOutputPath(inputFilePath: string, suffix: string): string {
@@ -255,12 +290,12 @@ export function getTaskDurationHours(task: Task): number {
 		return parseHourValue(duration.value);
 	}
 
-	return parseHourValue(duration.value) * HOURS_PER_DAY;
+	return parseHourValue(duration.value) * getConfiguredHoursPerDay();
 }
 
 export function getMinimumAcceptableBillableHours(
 	task: Task,
-	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+	acceptableShortfallHours: number = getConfiguredAcceptableShortfallHours(),
 ): number {
 	const durationHours = getTaskDurationHours(task);
 	return Math.max(durationHours - parseThresholdHours(acceptableShortfallHours), 0);
@@ -268,7 +303,7 @@ export function getMinimumAcceptableBillableHours(
 
 export function taskIsUnderallocated(
 	task: Task,
-	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+	acceptableShortfallHours: number = getConfiguredAcceptableShortfallHours(),
 ): boolean {
 	const billableHours = getTaskBillableHours(task);
 	const minimumAcceptableHours = getMinimumAcceptableBillableHours(
@@ -281,7 +316,7 @@ export function taskIsUnderallocated(
 export async function filterTasksByEmailWork(
 	email: string = DEFAULT_TARGET_EMAIL,
 	inputFilePath?: string,
-	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+	acceptableShortfallHours: number = getConfiguredAcceptableShortfallHours(),
 ): Promise<FilterTasksByEmailWorkResult> {
 	const normalizedEmail = requireEmail(email);
 	const resolvedInputPath = resolveInputFilePath(normalizedEmail, inputFilePath);
