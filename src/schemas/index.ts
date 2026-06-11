@@ -8,6 +8,7 @@ import { tasklistSchemas } from './tasklist.schemas.js';
 import { teamSchemas } from './team.schemas.js';
 import { tagSchemas } from './tag.schemas.js';
 import { userSchemas } from './user.schemas.js';
+import { timeLogSchemas } from './timelog.schemas.js';
 
 export const allToolSchemas = [
 	...Object.values(portalSchemas),
@@ -20,6 +21,7 @@ export const allToolSchemas = [
 	...Object.values(teamSchemas),
 	...Object.values(tagSchemas),
 	...Object.values(userSchemas),
+	...Object.values(timeLogSchemas),
 ];
 
 export * from './portal.schemas.js';
@@ -32,3 +34,4 @@ export * from './tasklist.schemas.js';
 export * from './team.schemas.js';
 export * from './tag.schemas.js';
 export * from './user.schemas.js';
+export * from './timelog.schemas.js';

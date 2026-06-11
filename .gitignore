@@ -52,3 +52,4 @@ coverage/
 Thumbs.db
 .DS_Store
 secret.md
+data

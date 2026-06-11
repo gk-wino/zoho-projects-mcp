@@ -48,7 +48,7 @@ export class ZohoClient {
 			headers,
 		};
 
-		if (body && (method === 'POST' || method === 'PATCH' || method === 'PUT')) {
+		if (body && (method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE')) {
 			if (contentType === 'application/x-www-form-urlencoded') {
 				// Convert object to URL-encoded string
 				const params = new URLSearchParams();

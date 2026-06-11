@@ -7,3 +7,4 @@ export { TaskListHandler } from './TaskListHandler.js';
 export { TeamHandler } from './TeamHandler.js';
 export { TagHandler } from './TagHandler.js';
 export { UserHandler } from './UserHandler.js';
+export { TimeLogHandler } from './TimeLogHandler.js';

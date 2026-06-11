@@ -26,6 +26,7 @@ import {
 	TeamHandler,
 	TagHandler,
 	UserHandler,
+	TimeLogHandler,
 } from './handlers/index.js';
 
 class ZohoProjectsServer {
@@ -42,6 +43,7 @@ class ZohoProjectsServer {
 		teams: TeamHandler;
 		tags: TagHandler;
 		users: UserHandler;
+		timelogs: TimeLogHandler;
 	};
 
 	constructor() {
@@ -72,6 +74,7 @@ class ZohoProjectsServer {
 			teams: new TeamHandler(this.client),
 			tags: new TagHandler(this.client),
 			users: new UserHandler(this.client),
+			timelogs: new TimeLogHandler(this.client),
 		};
 
 		this.setupHandlers();
@@ -155,6 +158,18 @@ class ZohoProjectsServer {
 							params.task_id,
 							params.comment_id,
 						);
+
+					// Time log operations
+					case 'list_time_logs':
+						return await this.handlers.timelogs.listTimeLogs(params);
+					case 'get_time_log':
+						return await this.handlers.timelogs.getTimeLog(params);
+					case 'create_time_log':
+						return await this.handlers.timelogs.createTimeLog(params);
+					case 'update_time_log':
+						return await this.handlers.timelogs.updateTimeLog(params);
+					case 'delete_time_log':
+						return await this.handlers.timelogs.deleteTimeLog(params);
 
 					// Issue operations
 					case 'list_issues':
