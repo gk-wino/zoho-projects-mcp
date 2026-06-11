@@ -11,6 +11,7 @@ import {
 	getFilteredTasksByEmailDataPath,
 	getFilteredTasksByEmailSummaryPath,
 	parseHourValue,
+	parseThresholdHours,
 	writeFilteredTasksByEmailFile,
 	writeFilteredTasksByEmailSummaryFile,
 } from '../../scripts/filter-tasks-by-email-work.ts';
@@ -39,6 +40,8 @@ async function main() {
 	assert.equal(parseHourValue('09:30'), 9.5);
 	assert.equal(parseHourValue('01:15'), 1.25);
 	assert.equal(parseHourValue(' 3 '), 3);
+	assert.equal(parseThresholdHours(undefined), 4);
+	assert.equal(parseThresholdHours('2.5'), 2.5);
 
 	const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filter-tasks-by-email-work-'));
 	const inputPath = path.join(tempDir, 'tasks-geoffrey-kimani-volane-com.json');
@@ -69,7 +72,7 @@ async function main() {
 		{
 			id: 'task-2',
 			prefix: 'ALPHA-T2',
-			name: 'Under duration hours',
+			name: 'Threshold acceptable hours',
 			project: { id: 'project-alpha', name: 'Project Alpha' },
 			tasklist: { id: 'tasklist-sprint-1', name: 'Sprint 1' },
 			status: { name: 'In Progress' },
@@ -206,6 +209,26 @@ async function main() {
 			},
 			created_by: { email: 'someone.else@volane.com', name: 'Someone Else' },
 		},
+		{
+			id: 'task-9',
+			prefix: 'BETA-T4',
+			name: 'Still below threshold floor',
+			project: { id: 'project-beta', name: 'Project Beta' },
+			tasklist: { id: 'tasklist-general', name: 'General' },
+			status: { name: 'Completed' },
+			duration: { value: '1', type: 'days' },
+			start_date: '2026-06-09T04:00:00.000Z',
+			end_date: '2026-06-09T13:30:00.000Z',
+			log_hours: {
+				billable_hours: '05:00',
+				non_billable_hours: '00:10',
+				total_hours: '05:10',
+			},
+			owners_and_work: {
+				owners: [{ email: targetEmail, name: 'Geoffrey' }],
+			},
+			created_by: { email: targetEmail, name: 'Geoffrey' },
+		},
 	];
 
 	await fs.writeFile(inputPath, `${JSON.stringify(fixtureTasks, null, 2)}\n`, 'utf8');
@@ -216,6 +239,7 @@ async function main() {
 		inputFilePath: inputPath,
 		outputFilePath: outputPath,
 		summaryFilePath: summaryPath,
+		acceptableShortfallHours: 4,
 		...result,
 	});
 
@@ -228,6 +252,7 @@ async function main() {
 			inputFilePath: inputPath,
 			outputFilePath: outputPath,
 			summaryFilePath: summaryPath,
+			acceptableShortfallHours: 4,
 			...result,
 		},
 		inputPath,
@@ -236,37 +261,38 @@ async function main() {
 	const filteredFileContents = await fs.readFile(outputPath, 'utf8');
 	const summaryFileContents = await fs.readFile(summaryPath, 'utf8');
 
-	assert.equal(result.allTasks.length, 8);
-	assert.equal(result.matchingTasks.length, 7);
+	assert.equal(result.allTasks.length, 9);
+	assert.equal(result.matchingTasks.length, 8);
 	assert.equal(result.excludedTasks.length, 2);
-	assert.equal(result.eligibleTasks.length, 5);
+	assert.equal(result.eligibleTasks.length, 6);
 	assert.equal(result.filteredTasks.length, 3);
-	assert.equal(result.compliantTasks.length, 2);
+	assert.equal(result.compliantTasks.length, 3);
 	assert.deepEqual(
 		result.filteredTasks.map((task) => task.id),
-		['task-1', 'task-2', 'task-6'],
+		['task-1', 'task-6', 'task-9'],
 	);
 	assert.deepEqual(
 		result.compliantTasks.map((task) => task.id),
-		['task-3', 'task-4'],
+		['task-2', 'task-3', 'task-4'],
 	);
 	assert.deepEqual(JSON.parse(filteredFileContents), result.filteredTasks);
 	assert.equal(summaryFileContents, summary);
-	assert.match(summary, /Initial Task Count\s*\|\s*8/);
-	assert.match(summary, /Validated Email-Matching Task Count\s*\|\s*7/);
+	assert.match(summary, /Acceptable Shortfall Hours:\s*4/);
+	assert.match(summary, /Initial Task Count\s*\|\s*9/);
+	assert.match(summary, /Validated Email-Matching Task Count\s*\|\s*8/);
 	assert.match(summary, /Excluded Status Count \(Open\/On Hold\)\s*\|\s*2/);
-	assert.match(summary, /Eligible Task Count\s*\|\s*5/);
+	assert.match(summary, /Eligible Task Count\s*\|\s*6/);
 	assert.match(summary, /Filtered Task Count\s*\|\s*3/);
 	assert.match(summary, /Tasks With Zero Billable Hours Logged\s*\|\s*2/);
 	assert.match(summary, /Underallocated Tasks With Some Billable Hours\s*\|\s*1/);
-	assert.match(summary, /Compliant Tasks \(Tasks With Relevant Logged Hours\)\s*\|\s*2/);
+	assert.match(summary, /Compliant Tasks \(Tasks With Relevant Logged Hours\)\s*\|\s*3/);
 	assert.match(summary, /### Project: Project Alpha \(project-alpha\)/);
 	assert.match(summary, /#### Task List: Sprint 1 \(tasklist-sprint-1\)/);
 	assert.match(summary, /### Project: Project Beta \(project-beta\)/);
 	assert.match(summary, /\| Prefix \| Task Name \| Status \| Duration \| Start Date \| End Date \| Billable Hours Logged \| Non Billable Hours Logged \|/);
 	assert.match(summary, /\| ALPHA-T1 \| Zero billable work \| Closed \| 1 days \(9\.50h\) \| 2026-06-01 \| 2026-06-01 \| 00:00 \| 00:30 \|/);
-	assert.match(summary, /\| ALPHA-T2 \| Under duration hours \| In Progress \| 1 days \(9\.50h\) \| 2026-06-02 \| 2026-06-02 \| 06:00 \| 01:00 \|/);
 	assert.match(summary, /\| BETA-T3 \| Creator match with zero billable \| completed \| 2 hours \(2\.00h\) \| 2026-06-06 \| 2026-06-06 \| 00:00 \| 00:00 \|/);
+	assert.match(summary, /\| BETA-T4 \| Still below threshold floor \| Completed \| 1 days \(9\.50h\) \| 2026-06-09 \| 2026-06-09 \| 05:00 \| 00:10 \|/);
 }
 
 main().catch((error) => {

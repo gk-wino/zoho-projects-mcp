@@ -67,10 +67,12 @@ type FilteredTasksSummaryData = FilterTasksByEmailWorkResult & {
 	inputFilePath: string;
 	outputFilePath: string;
 	summaryFilePath: string;
+	acceptableShortfallHours: number;
 };
 
 const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
 const HOURS_PER_DAY = 9.5;
+const DEFAULT_ACCEPTABLE_SHORTFALL_HOURS = 4;
 const EXCLUDED_STATUSES = new Set(['open', 'on hold']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,6 +98,25 @@ function resolveInputFilePath(email: string, inputFilePath?: string): string {
 	}
 
 	return getTasksByEmailDataPath(email);
+}
+
+export function parseThresholdHours(value: unknown): number {
+	if (value === undefined) {
+		return DEFAULT_ACCEPTABLE_SHORTFALL_HOURS;
+	}
+
+	const parsedValue =
+		typeof value === 'number'
+			? value
+			: typeof value === 'string'
+				? Number(value.trim())
+				: Number.NaN;
+
+	if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+		throw new Error('Acceptable shortfall hours must be a non-negative number.');
+	}
+
+	return parsedValue;
 }
 
 function getSiblingOutputPath(inputFilePath: string, suffix: string): string {
@@ -237,18 +258,34 @@ export function getTaskDurationHours(task: Task): number {
 	return parseHourValue(duration.value) * HOURS_PER_DAY;
 }
 
-export function taskIsUnderallocated(task: Task): boolean {
-	const billableHours = getTaskBillableHours(task);
+export function getMinimumAcceptableBillableHours(
+	task: Task,
+	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+): number {
 	const durationHours = getTaskDurationHours(task);
-	return billableHours <= 0 || billableHours < durationHours;
+	return Math.max(durationHours - parseThresholdHours(acceptableShortfallHours), 0);
+}
+
+export function taskIsUnderallocated(
+	task: Task,
+	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+): boolean {
+	const billableHours = getTaskBillableHours(task);
+	const minimumAcceptableHours = getMinimumAcceptableBillableHours(
+		task,
+		acceptableShortfallHours,
+	);
+	return billableHours <= 0 || billableHours < minimumAcceptableHours;
 }
 
 export async function filterTasksByEmailWork(
 	email: string = DEFAULT_TARGET_EMAIL,
 	inputFilePath?: string,
+	acceptableShortfallHours: number = DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
 ): Promise<FilterTasksByEmailWorkResult> {
 	const normalizedEmail = requireEmail(email);
 	const resolvedInputPath = resolveInputFilePath(normalizedEmail, inputFilePath);
+	const normalizedShortfallHours = parseThresholdHours(acceptableShortfallHours);
 	const fileContents = await fsp.readFile(resolvedInputPath, 'utf8');
 	const parsedData = JSON.parse(fileContents);
 
@@ -260,8 +297,12 @@ export async function filterTasksByEmailWork(
 	const matchingTasks = allTasks.filter((task) => taskMatchesEmail(task, normalizedEmail));
 	const excludedTasks = matchingTasks.filter((task) => isExcludedStatus(task));
 	const eligibleTasks = matchingTasks.filter((task) => !isExcludedStatus(task));
-	const filteredTasks = eligibleTasks.filter((task) => taskIsUnderallocated(task));
-	const compliantTasks = eligibleTasks.filter((task) => !taskIsUnderallocated(task));
+	const filteredTasks = eligibleTasks.filter((task) =>
+		taskIsUnderallocated(task, normalizedShortfallHours),
+	);
+	const compliantTasks = eligibleTasks.filter(
+		(task) => !taskIsUnderallocated(task, normalizedShortfallHours),
+	);
 
 	return {
 		allTasks,
@@ -293,6 +334,7 @@ export function formatFilteredTasksByEmailSummary(data: FilteredTasksSummaryData
 		`- Input JSON Path: ${data.inputFilePath}`,
 		`- Filtered JSON Path: ${data.outputFilePath}`,
 		`- Summary Markdown Path: ${data.summaryFilePath}`,
+		`- Acceptable Shortfall Hours: ${data.acceptableShortfallHours}`,
 		'',
 		'## Summary Metrics',
 		'',
@@ -405,6 +447,7 @@ export async function writeFilteredTasksByEmailSummaryFile(
 		inputFilePath: data.inputFilePath,
 		outputFilePath,
 		summaryFilePath,
+		acceptableShortfallHours: data.acceptableShortfallHours,
 		allTasks: data.allTasks,
 		matchingTasks: data.matchingTasks,
 		excludedTasks: data.excludedTasks,
@@ -420,12 +463,22 @@ export async function writeFilteredTasksByEmailSummaryFile(
 async function main(): Promise<void> {
 	try {
 		const targetEmail = process.argv[2] || DEFAULT_TARGET_EMAIL;
-		const inputFilePath = process.argv[3];
+		const secondArg = process.argv[3];
+		const thirdArg = process.argv[4];
+		const inputFilePath =
+			secondArg && Number.isNaN(Number(secondArg.trim())) ? secondArg : undefined;
+		const acceptableShortfallHours = parseThresholdHours(
+			thirdArg ?? (inputFilePath ? undefined : secondArg),
+		);
 		const normalizedEmail = requireEmail(targetEmail);
 		const resolvedInputPath = resolveInputFilePath(normalizedEmail, inputFilePath);
 		const outputFilePath = getFilteredTasksByEmailDataPath(normalizedEmail, resolvedInputPath);
 		const summaryFilePath = getFilteredTasksByEmailSummaryPath(normalizedEmail, resolvedInputPath);
-		const result = await filterTasksByEmailWork(normalizedEmail, resolvedInputPath);
+		const result = await filterTasksByEmailWork(
+			normalizedEmail,
+			resolvedInputPath,
+			acceptableShortfallHours,
+		);
 
 		await writeFilteredTasksByEmailFile(normalizedEmail, result.filteredTasks, resolvedInputPath);
 		await writeFilteredTasksByEmailSummaryFile(
@@ -434,6 +487,7 @@ async function main(): Promise<void> {
 				inputFilePath: resolvedInputPath,
 				outputFilePath,
 				summaryFilePath,
+				acceptableShortfallHours,
 				...result,
 			},
 			resolvedInputPath,
@@ -445,6 +499,7 @@ async function main(): Promise<void> {
 				inputFilePath: resolvedInputPath,
 				outputFilePath,
 				summaryFilePath,
+				acceptableShortfallHours,
 				...result,
 			}),
 		);
