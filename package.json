@@ -19,6 +19,7 @@
         "list:tasks": "./node_modules/.bin/tsx scripts/list-tasks.ts",
         "list:tasks:email": "./node_modules/.bin/tsx scripts/list-tasks-by-email.ts",
         "filter:tasks:email-work": "./node_modules/.bin/tsx scripts/filter-tasks-by-email-work.ts",
+        "create:generated:timelogs": "./node_modules/.bin/tsx scripts/create-generated-timelogs.ts",
         "debug:timelog": "npm run build && npx tsx scripts/create-timelogs.ts",
         "test:smoke": "npm run build && npx tsx tests/smoke/portal.test.ts",
         "test:smoke:issue": "npm run build && npx tsx tests/smoke/issue.test.ts",

@@ -44,6 +44,7 @@ export type Task = Record<string, unknown> & {
 	duration?: TaskDuration;
 	start_date?: string;
 	end_date?: string;
+	created_time?: string;
 	log_hours?: TaskLogHours;
 	owners_and_work?: {
 		owners?: TaskOwner[];
@@ -54,7 +55,7 @@ export type Task = Record<string, unknown> & {
 	};
 };
 
-type FilterTasksByEmailWorkResult = {
+export type FilterTasksByEmailWorkResult = {
 	allTasks: Task[];
 	matchingTasks: Task[];
 	excludedTasks: Task[];
@@ -71,9 +72,75 @@ type FilteredTasksSummaryData = FilterTasksByEmailWorkResult & {
 	acceptableShortfallHours: number;
 };
 
+export type GeneratedTimeLogDraft = {
+	project_id: string;
+	module_type: 'task';
+	module_id: string;
+	task_prefix: string;
+	log_name: string;
+	date: string;
+	bill_status: 'Billable';
+	hours: string;
+	start_time: string;
+	end_time: string;
+	status: 'Approved';
+	used_created_at_date: boolean;
+};
+
+export type GeneratedTimeLogTaskPlan = {
+	task: Task;
+	currentBillableHours: number;
+	targetThresholdHours: number;
+	additionalHoursNeeded: number;
+	generatedDrafts: GeneratedTimeLogDraft[];
+};
+
+export type GenerateTimeLogDraftsResult = {
+	tasksNeedingGeneratedTimeLogs: number;
+	totalGeneratedTimeLogs: number;
+	totalPlannedBillableHours: number;
+	zeroDurationFallbackTasks: number;
+	createdTimeDatedDrafts: number;
+	generatedTimeLogs: GeneratedTimeLogDraft[];
+	taskPlans: GeneratedTimeLogTaskPlan[];
+};
+
+type GeneratedTimeLogSummaryData = GenerateTimeLogDraftsResult & {
+	email: string;
+	inputFilePath: string;
+	outputFilePath: string;
+	summaryFilePath: string;
+	acceptableShortfallHours: number;
+	generatedTimeLogMaxDailyHours: number;
+	filteredTasks: Task[];
+};
+
+type GenerateTimeLogDraftOptions = {
+	acceptableShortfallHours?: number;
+	randomFn?: () => number;
+	runDate?: Date;
+};
+
 const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
 const DEFAULT_HOURS_PER_DAY = 9.5;
 const DEFAULT_ACCEPTABLE_SHORTFALL_HOURS = 4;
+const DEFAULT_GENERATED_TIMELOG_MAX_DAILY_HOURS = 9;
+const FULL_DAY_MIN_HOURS = 7;
+const FULL_DAY_MAX_HOURS = 14;
+const ZERO_DURATION_MIN_HOURS = 7;
+const ZERO_DURATION_MAX_HOURS = 14;
+const GENERATED_START_HOUR = 8;
+const GENERATED_START_MINUTE = 30;
+const GENERATED_START_OFFSET_MINUTES = 30;
+const GENERATED_END_HOUR = 17;
+const GENERATED_END_MINUTE = 0;
+const GENERATED_END_OFFSET_MINUTES = 60;
+const GENERATED_START_MAX_HOUR = 9;
+const GENERATED_START_MAX_MINUTE = 0;
+const GENERATED_END_MAX_HOUR = 18;
+const GENERATED_END_MAX_MINUTE = 0;
+const GENERATED_MINIMUM_END_HOUR = 17;
+const MAX_GENERATED_DRAFT_HOURS = 17 + 59 / 60;
 const EXCLUDED_STATUSES = new Set(['open', 'on hold']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,12 +213,25 @@ function getConfiguredAcceptableShortfallHours(): number {
 	);
 }
 
+function getConfiguredGeneratedTimeLogMaxDailyHours(): number {
+	loadOptionalEnv();
+	return parseNonNegativeNumber(
+		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS,
+		DEFAULT_GENERATED_TIMELOG_MAX_DAILY_HOURS,
+		'GENERATED_TIMELOG_MAX_DAILY_HOURS',
+	);
+}
+
 export function parseThresholdHours(value: unknown): number {
 	if (value === undefined) {
 		return getConfiguredAcceptableShortfallHours();
 	}
 
-	return parseNonNegativeNumber(value, DEFAULT_ACCEPTABLE_SHORTFALL_HOURS, 'Acceptable shortfall hours');
+	return parseNonNegativeNumber(
+		value,
+		DEFAULT_ACCEPTABLE_SHORTFALL_HOURS,
+		'Acceptable shortfall hours',
+	);
 }
 
 function getSiblingOutputPath(inputFilePath: string, suffix: string): string {
@@ -210,19 +290,300 @@ function compareTasks(a: Task, b: Task): number {
 		return projectComparison;
 	}
 
-	const taskListComparison = formatDisplayText(a.tasklist?.name).localeCompare(
-		formatDisplayText(b.tasklist?.name),
-	);
-	if (taskListComparison !== 0) {
-		return taskListComparison;
-	}
-
-	const prefixComparison = formatDisplayText(a.prefix).localeCompare(formatDisplayText(b.prefix));
-	if (prefixComparison !== 0) {
-		return prefixComparison;
+	const taskComparison = formatDisplayText(a.prefix).localeCompare(formatDisplayText(b.prefix));
+	if (taskComparison !== 0) {
+		return taskComparison;
 	}
 
 	return formatDisplayText(a.name).localeCompare(formatDisplayText(b.name));
+}
+
+function sanitizeRandomValue(randomFn: () => number): number {
+	const value = randomFn();
+	if (!Number.isFinite(value)) {
+		return 0;
+	}
+
+	if (value <= 0) {
+		return 0;
+	}
+
+	if (value >= 1) {
+		return 0.999999999999;
+	}
+
+	return value;
+}
+
+function randomInt(min: number, max: number, randomFn: () => number): number {
+	if (max <= min) {
+		return min;
+	}
+
+	return min + Math.floor(sanitizeRandomValue(randomFn) * (max - min + 1));
+}
+
+function hoursToMinutes(hours: number): number {
+	return Math.max(0, Math.ceil(hours * 60 - 1e-9));
+}
+
+function minutesToHours(totalMinutes: number): number {
+	return totalMinutes / 60;
+}
+
+function formatMinutesAsHours(totalMinutes: number): string {
+	const safeMinutes = Math.max(0, Math.round(totalMinutes));
+	const hours = Math.floor(safeMinutes / 60);
+	const minutes = safeMinutes % 60;
+	return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function formatTimeOfDay(totalMinutes: number): string {
+	const dayMinutes = ((Math.round(totalMinutes) % (24 * 60)) + 24 * 60) % (24 * 60);
+	const hours = Math.floor(dayMinutes / 60);
+	const minutes = dayMinutes % 60;
+	return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function getTaskIdentifier(task: Task): string {
+	const taskId = task.id;
+	if (taskId === undefined || taskId === null || String(taskId).trim().length === 0) {
+		throw new Error(`Task is missing an id: ${task.name || 'Unnamed task'}`);
+	}
+
+	return String(taskId);
+}
+
+function getProjectIdentifier(task: Task): string {
+	const projectId = task.project?.id;
+	if (projectId === undefined || projectId === null || String(projectId).trim().length === 0) {
+		throw new Error(`Task is missing a project id: ${task.name || 'Unnamed task'}`);
+	}
+
+	return String(projectId);
+}
+
+function getTaskThresholdHours(
+	task: Task,
+	acceptableShortfallHours: number = getConfiguredAcceptableShortfallHours(),
+): number {
+	return getMinimumAcceptableBillableHours(task, acceptableShortfallHours);
+}
+
+function getEffectiveTaskDates(task: Task, runDate: Date): { dates: string[]; usedCreatedAtDate: boolean } {
+	const normalizedStartDate = formatDate(task.start_date);
+	const normalizedEndDate = formatDate(task.end_date);
+
+	if (normalizedStartDate !== 'N/A' || normalizedEndDate !== 'N/A') {
+		const startDate = normalizedStartDate !== 'N/A' ? normalizedStartDate : normalizedEndDate;
+		const endDate = normalizedEndDate !== 'N/A' ? normalizedEndDate : normalizedStartDate;
+		return {
+			dates: buildInclusiveDateRange(startDate, endDate),
+			usedCreatedAtDate: false,
+		};
+	}
+
+	const createdAtDate = formatDate(task.created_time);
+	if (createdAtDate !== 'N/A') {
+		return {
+			dates: [createdAtDate],
+			usedCreatedAtDate: true,
+		};
+	}
+
+	return {
+		dates: [runDate.toISOString().slice(0, 10)],
+		usedCreatedAtDate: false,
+	};
+}
+
+function buildInclusiveDateRange(startDate: string, endDate: string): string[] {
+	const startParts = startDate.split('-').map(Number);
+	const endParts = endDate.split('-').map(Number);
+
+	if (startParts.length !== 3 || endParts.length !== 3) {
+		return [startDate];
+	}
+
+	const startValue = Date.UTC(startParts[0], startParts[1] - 1, startParts[2]);
+	const endValue = Date.UTC(endParts[0], endParts[1] - 1, endParts[2]);
+
+	if (!Number.isFinite(startValue) || !Number.isFinite(endValue) || endValue < startValue) {
+		return [startDate];
+	}
+
+	const dates: string[] = [];
+	for (let current = startValue; current <= endValue; current += 24 * 60 * 60 * 1000) {
+		dates.push(new Date(current).toISOString().slice(0, 10));
+	}
+
+	return dates;
+}
+
+function buildGeneratedTimeLogName(task: Task, index: number): string {
+	const prefix = formatDisplayText(task.prefix, 'TASK');
+	const taskName = formatDisplayText(task.name, 'Unnamed task');
+	return `Generated timelog ${prefix} - ${taskName} - ${index + 1}`;
+}
+
+function getMinimumGeneratedDraftMinutes(): number {
+	return (
+		GENERATED_END_HOUR * 60 +
+		GENERATED_END_MINUTE -
+		(GENERATED_START_MAX_HOUR * 60 + GENERATED_START_MAX_MINUTE)
+	);
+}
+
+function getMaximumGeneratedDraftMinutes(): number {
+	return (
+		GENERATED_END_MAX_HOUR * 60 +
+		GENERATED_END_MAX_MINUTE -
+		(GENERATED_START_HOUR * 60 + GENERATED_START_MINUTE)
+	);
+}
+
+function getGeneratedTimeLogMaxDailyMinutes(): number {
+	const configuredMaxHours = Math.min(getConfiguredGeneratedTimeLogMaxDailyHours(), MAX_GENERATED_DRAFT_HOURS);
+	const minimumDraftMinutes = getMinimumGeneratedDraftMinutes();
+	const maximumDraftMinutes = getMaximumGeneratedDraftMinutes();
+	return Math.max(
+		minimumDraftMinutes,
+		Math.min(hoursToMinutes(configuredMaxHours), maximumDraftMinutes),
+	);
+}
+
+function buildDraftFromMinutes(
+	task: Task,
+	date: string,
+	durationMinutes: number,
+	draftIndex: number,
+	usedCreatedAtDate: boolean,
+	randomFn: () => number,
+): GeneratedTimeLogDraft {
+	const earliestAllowedStartMinutes = GENERATED_START_HOUR * 60 + GENERATED_START_MINUTE;
+	const latestAllowedStartMinutes = GENERATED_START_MAX_HOUR * 60 + GENERATED_START_MAX_MINUTE;
+	const earliestAllowedEndMinutes = GENERATED_END_HOUR * 60 + GENERATED_END_MINUTE;
+	const latestAllowedEndMinutes = GENERATED_END_MAX_HOUR * 60 + GENERATED_END_MAX_MINUTE;
+
+	let startMinutes =
+		GENERATED_START_HOUR * 60 +
+		GENERATED_START_MINUTE +
+		randomInt(0, GENERATED_START_OFFSET_MINUTES, randomFn);
+	let endMinutes =
+		GENERATED_END_HOUR * 60 +
+		GENERATED_END_MINUTE +
+		randomInt(0, GENERATED_END_OFFSET_MINUTES, randomFn);
+	const minimumDurationMinutes = Math.min(
+		Math.max(durationMinutes, getMinimumGeneratedDraftMinutes()),
+		getMaximumGeneratedDraftMinutes(),
+	);
+	const currentDurationMinutes = endMinutes - startMinutes;
+
+	if (currentDurationMinutes < minimumDurationMinutes) {
+		let remainingMinutesNeeded = minimumDurationMinutes - currentDurationMinutes;
+		const availableEarlierStartMinutes = startMinutes - earliestAllowedStartMinutes;
+		const startShiftMinutes = Math.min(availableEarlierStartMinutes, remainingMinutesNeeded);
+		startMinutes -= startShiftMinutes;
+		remainingMinutesNeeded -= startShiftMinutes;
+
+		if (remainingMinutesNeeded > 0) {
+			const availableLaterEndMinutes = latestAllowedEndMinutes - endMinutes;
+			const endShiftMinutes = Math.min(availableLaterEndMinutes, remainingMinutesNeeded);
+			endMinutes += endShiftMinutes;
+		}
+	}
+
+	startMinutes = Math.min(Math.max(startMinutes, earliestAllowedStartMinutes), latestAllowedStartMinutes);
+	endMinutes = Math.min(Math.max(endMinutes, earliestAllowedEndMinutes), latestAllowedEndMinutes);
+	const effectiveDurationMinutes = endMinutes - startMinutes;
+
+	return {
+		project_id: getProjectIdentifier(task),
+		module_type: 'task',
+		module_id: getTaskIdentifier(task),
+		task_prefix: formatDisplayText(task.prefix, 'TASK'),
+		log_name: buildGeneratedTimeLogName(task, draftIndex),
+		date,
+		bill_status: 'Billable',
+		hours: formatMinutesAsHours(effectiveDurationMinutes),
+		start_time: formatTimeOfDay(startMinutes),
+		end_time: formatTimeOfDay(endMinutes),
+		status: 'Approved',
+		used_created_at_date: usedCreatedAtDate,
+	};
+}
+
+function buildPartialDayDurationMinutes(
+	requiredMinutes: number,
+	maxDailyMinutes: number,
+	randomFn: () => number,
+): number {
+	const minimumGeneratedDraftMinutes = Math.min(getMinimumGeneratedDraftMinutes(), maxDailyMinutes);
+	if (requiredMinutes <= minimumGeneratedDraftMinutes) {
+		return minimumGeneratedDraftMinutes;
+	}
+
+	const normalizedRequiredMinutes = Math.max(requiredMinutes, minimumGeneratedDraftMinutes);
+	const wholeHours = Math.floor(normalizedRequiredMinutes / 60);
+	const minimumMinutes = normalizedRequiredMinutes - wholeHours * 60;
+	const maximumMinutes = Math.min(59, maxDailyMinutes - wholeHours * 60);
+
+	if (wholeHours * 60 >= maxDailyMinutes || maximumMinutes <= minimumMinutes) {
+		return Math.min(Math.max(normalizedRequiredMinutes, wholeHours * 60 + minimumMinutes), maxDailyMinutes);
+	}
+
+	return wholeHours * 60 + randomInt(minimumMinutes, maximumMinutes, randomFn);
+}
+
+function buildGeneratedTimeLogDurations(
+	task: Task,
+	acceptableShortfallHours: number,
+	randomFn: () => number,
+): number[] {
+	const maxDailyMinutes = getGeneratedTimeLogMaxDailyMinutes();
+	const taskDurationMinutes = hoursToMinutes(getTaskDurationHours(task));
+	const minimumGeneratedDraftMinutes = Math.min(getMinimumGeneratedDraftMinutes(), maxDailyMinutes);
+
+	if (taskDurationMinutes <= 0) {
+		const upperMinutes = Math.max(
+			minimumGeneratedDraftMinutes,
+			Math.min(hoursToMinutes(ZERO_DURATION_MAX_HOURS), maxDailyMinutes),
+		);
+		const lowerMinutes = Math.min(
+			Math.max(hoursToMinutes(ZERO_DURATION_MIN_HOURS), minimumGeneratedDraftMinutes),
+			upperMinutes,
+		);
+		return [randomInt(lowerMinutes, upperMinutes, randomFn)];
+	}
+
+	let remainingMinutes = hoursToMinutes(
+		getAdditionalBillableHoursNeeded(task, acceptableShortfallHours),
+	);
+	if (remainingMinutes <= 0) {
+		return [];
+	}
+
+	const durations: number[] = [];
+	const fullDayMinimumMinutes = Math.min(
+		Math.max(hoursToMinutes(FULL_DAY_MIN_HOURS), minimumGeneratedDraftMinutes),
+		maxDailyMinutes,
+	);
+	const fullDayMaximumMinutes = Math.max(
+		fullDayMinimumMinutes,
+		Math.min(hoursToMinutes(FULL_DAY_MAX_HOURS), maxDailyMinutes),
+	);
+
+	while (remainingMinutes > maxDailyMinutes) {
+		const fullDayDuration = randomInt(fullDayMinimumMinutes, fullDayMaximumMinutes, randomFn);
+		durations.push(fullDayDuration);
+		remainingMinutes -= fullDayDuration;
+	}
+
+	if (remainingMinutes > 0) {
+		durations.push(buildPartialDayDurationMinutes(remainingMinutes, maxDailyMinutes, randomFn));
+	}
+
+	return durations;
 }
 
 export function getFilteredTasksByEmailDataPath(email: string, inputFilePath?: string): string {
@@ -233,6 +594,16 @@ export function getFilteredTasksByEmailDataPath(email: string, inputFilePath?: s
 export function getFilteredTasksByEmailSummaryPath(email: string, inputFilePath?: string): string {
 	const resolvedInputPath = resolveInputFilePath(requireEmail(email), inputFilePath);
 	return getSiblingOutputPath(resolvedInputPath, '-underallocated-summary.md');
+}
+
+export function getGeneratedTimeLogsDataPath(email: string, inputFilePath?: string): string {
+	const resolvedInputPath = resolveInputFilePath(requireEmail(email), inputFilePath);
+	return getSiblingOutputPath(resolvedInputPath, '-generated-timelogs.json');
+}
+
+export function getGeneratedTimeLogsSummaryPath(email: string, inputFilePath?: string): string {
+	const resolvedInputPath = resolveInputFilePath(requireEmail(email), inputFilePath);
+	return getSiblingOutputPath(resolvedInputPath, '-generated-timelogs-summary.md');
 }
 
 export function parseHourValue(value: unknown): number {
@@ -299,6 +670,14 @@ export function getMinimumAcceptableBillableHours(
 ): number {
 	const durationHours = getTaskDurationHours(task);
 	return Math.max(durationHours - parseThresholdHours(acceptableShortfallHours), 0);
+}
+
+export function getAdditionalBillableHoursNeeded(
+	task: Task,
+	acceptableShortfallHours: number = getConfiguredAcceptableShortfallHours(),
+): number {
+	const targetHours = getMinimumAcceptableBillableHours(task, acceptableShortfallHours);
+	return Math.max(targetHours - getTaskBillableHours(task), 0);
 }
 
 export function taskIsUnderallocated(
@@ -495,6 +874,197 @@ export async function writeFilteredTasksByEmailSummaryFile(
 	await fsp.writeFile(summaryFilePath, summary, 'utf8');
 }
 
+export function generateTimeLogDraftsForTask(
+	task: Task,
+	options: GenerateTimeLogDraftOptions = {},
+): GeneratedTimeLogDraft[] {
+	const normalizedShortfallHours = parseThresholdHours(options.acceptableShortfallHours);
+	const randomFn = options.randomFn || Math.random;
+	const runDate = options.runDate || new Date();
+	const durations = buildGeneratedTimeLogDurations(task, normalizedShortfallHours, randomFn);
+	if (durations.length === 0) {
+		return [];
+	}
+
+	const planningDates = getEffectiveTaskDates(task, runDate);
+
+	return durations.map((durationMinutes, index) =>
+		buildDraftFromMinutes(
+			task,
+			planningDates.dates[Math.min(index, planningDates.dates.length - 1)],
+			durationMinutes,
+			index,
+			planningDates.usedCreatedAtDate,
+			randomFn,
+		),
+	);
+}
+
+export function generateTimeLogDraftsForFilteredTasks(
+	filteredTasks: Task[],
+	options: GenerateTimeLogDraftOptions = {},
+): GenerateTimeLogDraftsResult {
+	const normalizedShortfallHours = parseThresholdHours(options.acceptableShortfallHours);
+	const taskPlans: GeneratedTimeLogTaskPlan[] = [];
+	const generatedTimeLogs: GeneratedTimeLogDraft[] = [];
+
+	for (const task of filteredTasks) {
+		const currentBillableHours = getTaskBillableHours(task);
+		const targetThresholdHours = getTaskThresholdHours(task, normalizedShortfallHours);
+		const additionalHoursNeeded = getAdditionalBillableHoursNeeded(task, normalizedShortfallHours);
+		const generatedDrafts = generateTimeLogDraftsForTask(task, {
+			acceptableShortfallHours: normalizedShortfallHours,
+			randomFn: options.randomFn,
+			runDate: options.runDate,
+		});
+
+		if (generatedDrafts.length === 0) {
+			continue;
+		}
+
+		taskPlans.push({
+			task,
+			currentBillableHours,
+			targetThresholdHours,
+			additionalHoursNeeded,
+			generatedDrafts,
+		});
+		generatedTimeLogs.push(...generatedDrafts);
+	}
+
+	return {
+		tasksNeedingGeneratedTimeLogs: taskPlans.length,
+		totalGeneratedTimeLogs: generatedTimeLogs.length,
+		totalPlannedBillableHours: minutesToHours(
+			generatedTimeLogs.reduce((sum, draft) => sum + hoursToMinutes(parseHourValue(draft.hours)), 0),
+		),
+		zeroDurationFallbackTasks: taskPlans.filter(
+			(plan) => hoursToMinutes(getTaskDurationHours(plan.task)) <= 0,
+		).length,
+		createdTimeDatedDrafts: generatedTimeLogs.filter((draft) => draft.used_created_at_date).length,
+		generatedTimeLogs,
+		taskPlans,
+	};
+}
+
+export async function writeGeneratedTimeLogsFile(
+	email: string,
+	generatedTimeLogs: GeneratedTimeLogDraft[],
+	inputFilePath?: string,
+): Promise<void> {
+	const dataPath = getGeneratedTimeLogsDataPath(email, inputFilePath);
+	await fsp.mkdir(path.dirname(dataPath), { recursive: true });
+	await fsp.writeFile(dataPath, `${JSON.stringify(generatedTimeLogs, null, 2)}\n`, 'utf8');
+}
+
+export function formatGeneratedTimeLogsSummary(data: GeneratedTimeLogSummaryData): string {
+	const lines = [
+		'# Generated Timelogs Summary',
+		'',
+		`- Target Email: ${data.email}`,
+		`- Input JSON Path: ${data.inputFilePath}`,
+		`- Generated Timelog JSON Path: ${data.outputFilePath}`,
+		`- Generated Timelog Summary Path: ${data.summaryFilePath}`,
+		`- Acceptable Shortfall Hours: ${data.acceptableShortfallHours}`,
+		`- Generated Timelog Max Daily Hours: ${data.generatedTimeLogMaxDailyHours}`,
+		'',
+		'## Summary Metrics',
+		'',
+		'| Metric | Count |',
+		'| --- | ---: |',
+		`| Filtered Task Count | ${data.filteredTasks.length} |`,
+		`| Tasks Needing Generated Timelogs | ${data.tasksNeedingGeneratedTimeLogs} |`,
+		`| Total Generated Timelogs | ${data.totalGeneratedTimeLogs} |`,
+		`| Total Planned Billable Hours | ${formatNumberToHours(data.totalPlannedBillableHours)} |`,
+		`| Zero Duration Fallback Tasks | ${data.zeroDurationFallbackTasks} |`,
+		`| Created-Time-Dated Drafts | ${data.createdTimeDatedDrafts} |`,
+		'',
+		'## Generated Timelogs By Project And Task',
+		'',
+	];
+
+	if (data.taskPlans.length === 0) {
+		lines.push('No generated timelog drafts were needed for the filtered tasks.');
+		return lines.join('\n');
+	}
+
+	const sortedPlans = [...data.taskPlans].sort((a, b) => compareTasks(a.task, b.task));
+	const projectGroups = new Map<string, { projectName: string; projectId: string; taskPlans: GeneratedTimeLogTaskPlan[] }>();
+
+	for (const plan of sortedPlans) {
+		const projectName = formatDisplayText(plan.task.project?.name, 'Unknown project');
+		const projectId = formatDisplayText(plan.task.project?.id, 'N/A');
+		const projectKey = `${projectName}::${projectId}`;
+		const group = projectGroups.get(projectKey) || {
+			projectName,
+			projectId,
+			taskPlans: [],
+		};
+		group.taskPlans.push(plan);
+		projectGroups.set(projectKey, group);
+	}
+
+	for (const projectGroup of projectGroups.values()) {
+		lines.push(`### Project: ${projectGroup.projectName} (${projectGroup.projectId})`);
+		lines.push('');
+
+		for (const plan of projectGroup.taskPlans) {
+			const taskId = formatDisplayText(plan.task.id);
+			const taskLabel = `${formatDisplayText(plan.task.prefix)} - ${formatDisplayText(plan.task.name)}`;
+			lines.push(`#### Task: ${taskLabel} (${taskId})`);
+			lines.push('');
+			lines.push(
+				`Current Billable Hours: ${formatNumberToHours(plan.currentBillableHours)} | Target Threshold Hours: ${formatNumberToHours(plan.targetThresholdHours)} | Additional Hours Needed: ${formatNumberToHours(plan.additionalHoursNeeded)} | Generated Timelog Count: ${plan.generatedDrafts.length}`,
+			);
+			lines.push('');
+			lines.push('| Date | Hours | Start Time | End Time | Used Created At Date |');
+			lines.push('| --- | ---: | --- | --- | --- |');
+
+			for (const draft of plan.generatedDrafts) {
+				lines.push(
+					`| ${escapeMarkdownCell(draft.date)} | ${escapeMarkdownCell(draft.hours)} | ${escapeMarkdownCell(draft.start_time)} | ${escapeMarkdownCell(draft.end_time)} | ${draft.used_created_at_date ? 'true' : 'false'} |`,
+				);
+			}
+
+			lines.push('');
+		}
+	}
+
+	return lines.join('\n');
+}
+
+export async function writeGeneratedTimeLogsSummaryFile(
+	email: string,
+	data: Omit<GeneratedTimeLogSummaryData, 'email' | 'outputFilePath' | 'summaryFilePath'> &
+		Partial<Pick<GeneratedTimeLogSummaryData, 'outputFilePath' | 'summaryFilePath'>>,
+	inputFilePath?: string,
+): Promise<void> {
+	const normalizedEmail = requireEmail(email);
+	const summaryFilePath =
+		data.summaryFilePath || getGeneratedTimeLogsSummaryPath(normalizedEmail, inputFilePath);
+	const outputFilePath =
+		data.outputFilePath || getGeneratedTimeLogsDataPath(normalizedEmail, inputFilePath);
+	const summary = formatGeneratedTimeLogsSummary({
+		email: normalizedEmail,
+		inputFilePath: data.inputFilePath,
+		outputFilePath,
+		summaryFilePath,
+		acceptableShortfallHours: data.acceptableShortfallHours,
+		generatedTimeLogMaxDailyHours: data.generatedTimeLogMaxDailyHours,
+		filteredTasks: data.filteredTasks,
+		tasksNeedingGeneratedTimeLogs: data.tasksNeedingGeneratedTimeLogs,
+		totalGeneratedTimeLogs: data.totalGeneratedTimeLogs,
+		totalPlannedBillableHours: data.totalPlannedBillableHours,
+		zeroDurationFallbackTasks: data.zeroDurationFallbackTasks,
+		createdTimeDatedDrafts: data.createdTimeDatedDrafts,
+		generatedTimeLogs: data.generatedTimeLogs,
+		taskPlans: data.taskPlans,
+	});
+
+	await fsp.mkdir(path.dirname(summaryFilePath), { recursive: true });
+	await fsp.writeFile(summaryFilePath, summary, 'utf8');
+}
+
 async function main(): Promise<void> {
 	try {
 		const targetEmail = process.argv[2] || DEFAULT_TARGET_EMAIL;
@@ -507,36 +1077,85 @@ async function main(): Promise<void> {
 		);
 		const normalizedEmail = requireEmail(targetEmail);
 		const resolvedInputPath = resolveInputFilePath(normalizedEmail, inputFilePath);
-		const outputFilePath = getFilteredTasksByEmailDataPath(normalizedEmail, resolvedInputPath);
-		const summaryFilePath = getFilteredTasksByEmailSummaryPath(normalizedEmail, resolvedInputPath);
-		const result = await filterTasksByEmailWork(
+		const filteredOutputFilePath = getFilteredTasksByEmailDataPath(normalizedEmail, resolvedInputPath);
+		const filteredSummaryFilePath = getFilteredTasksByEmailSummaryPath(
+			normalizedEmail,
+			resolvedInputPath,
+		);
+		const generatedOutputFilePath = getGeneratedTimeLogsDataPath(normalizedEmail, resolvedInputPath);
+		const generatedSummaryFilePath = getGeneratedTimeLogsSummaryPath(
+			normalizedEmail,
+			resolvedInputPath,
+		);
+		const filteredResult = await filterTasksByEmailWork(
 			normalizedEmail,
 			resolvedInputPath,
 			acceptableShortfallHours,
 		);
+		const generatedTimeLogResult = generateTimeLogDraftsForFilteredTasks(
+			filteredResult.filteredTasks,
+			{
+				acceptableShortfallHours,
+			},
+		);
 
-		await writeFilteredTasksByEmailFile(normalizedEmail, result.filteredTasks, resolvedInputPath);
+		await writeFilteredTasksByEmailFile(
+			normalizedEmail,
+			filteredResult.filteredTasks,
+			resolvedInputPath,
+		);
 		await writeFilteredTasksByEmailSummaryFile(
 			normalizedEmail,
 			{
 				inputFilePath: resolvedInputPath,
-				outputFilePath,
-				summaryFilePath,
+				outputFilePath: filteredOutputFilePath,
+				summaryFilePath: filteredSummaryFilePath,
 				acceptableShortfallHours,
-				...result,
+				...filteredResult,
+			},
+			resolvedInputPath,
+		);
+		await writeGeneratedTimeLogsFile(
+			normalizedEmail,
+			generatedTimeLogResult.generatedTimeLogs,
+			resolvedInputPath,
+		);
+		await writeGeneratedTimeLogsSummaryFile(
+			normalizedEmail,
+			{
+				inputFilePath: resolvedInputPath,
+				outputFilePath: generatedOutputFilePath,
+				summaryFilePath: generatedSummaryFilePath,
+				acceptableShortfallHours,
+				generatedTimeLogMaxDailyHours: getConfiguredGeneratedTimeLogMaxDailyHours(),
+				filteredTasks: filteredResult.filteredTasks,
+				...generatedTimeLogResult,
 			},
 			resolvedInputPath,
 		);
 
 		console.log(
-			formatFilteredTasksByEmailSummary({
-				email: normalizedEmail,
-				inputFilePath: resolvedInputPath,
-				outputFilePath,
-				summaryFilePath,
-				acceptableShortfallHours,
-				...result,
-			}),
+			[
+				formatFilteredTasksByEmailSummary({
+					email: normalizedEmail,
+					inputFilePath: resolvedInputPath,
+					outputFilePath: filteredOutputFilePath,
+					summaryFilePath: filteredSummaryFilePath,
+					acceptableShortfallHours,
+					...filteredResult,
+				}),
+				'',
+				formatGeneratedTimeLogsSummary({
+					email: normalizedEmail,
+					inputFilePath: resolvedInputPath,
+					outputFilePath: generatedOutputFilePath,
+					summaryFilePath: generatedSummaryFilePath,
+					acceptableShortfallHours,
+					generatedTimeLogMaxDailyHours: getConfiguredGeneratedTimeLogMaxDailyHours(),
+					filteredTasks: filteredResult.filteredTasks,
+					...generatedTimeLogResult,
+				}),
+			].join('\n'),
 		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -552,5 +1171,3 @@ const isEntrypoint = process.argv[1]
 if (isEntrypoint) {
 	await main();
 }
-
-void repoRoot;
