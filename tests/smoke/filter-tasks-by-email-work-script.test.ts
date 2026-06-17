@@ -315,8 +315,8 @@ async function main() {
 			},
 			{
 				id: 'task-10',
-				prefix: 'PP3-T594',
-				name: 'Ignored exact prefix task',
+				prefix: 'PP3-T381',
+				name: 'Ignored prefix range task',
 				project: { id: 'project-gamma', name: 'Project Gamma' },
 				tasklist: { id: 'tasklist-gamma', name: 'Gamma' },
 				status: { name: 'Closed' },
@@ -357,7 +357,7 @@ async function main() {
 			},
 		];
 
-		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
+		process.env.IGNORED_TASK_PREFIXES = ' PP3-T381 -- PP3-T381 , PP3-* ';
 		await fs.writeFile(inputPath, `${JSON.stringify(fixtureTasks, null, 2)}\n`, 'utf8');
 
 		const filterResult = await filterTasksByEmailWork(undefined, inputPath);
@@ -668,7 +668,7 @@ async function main() {
 		process.env.HOURS_PER_DAY = '8';
 		process.env.ACCEPTABLE_SHORTFALL_HOURS = '1';
 		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = '7.5';
-		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
+		process.env.IGNORED_TASK_PREFIXES = ' PP3-T381 -- PP3-T381 , PP3-* ';
 		assert.equal(parseThresholdHours(undefined), 1);
 
 		const envFilterResult = await filterTasksByEmailWork(undefined, inputPath);
@@ -713,7 +713,7 @@ async function main() {
 		);
 
 		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = '14';
-		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
+		process.env.IGNORED_TASK_PREFIXES = ' PP3-T381 -- PP3-T381 , PP3-* ';
 		const fourteenHourDrafts = generateTimeLogDraftsForTask(fixtureTasks[1], {
 			randomFn: createRandomFn(1, 1, 1, 1, 1, 1, 1, 1),
 			runDate: fixedRunDate,

@@ -235,8 +235,8 @@ function parseDelimitedList(value: unknown, label: string): string[] {
 	}
 
 	return normalizedValue
-		.split(/[\s,;]+/)
-		.map((entry) => entry.trim())
+		.split(/[\n,;]+/)
+		.map((entry) => entry.replace(/\s+/g, ''))
 		.filter(Boolean)
 		.map((entry) => entry.toLowerCase());
 }
@@ -858,6 +858,47 @@ function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function splitNaturalSegments(value: string): Array<string | number> {
+	return value.match(/\d+|\D+/g)?.map((segment) => {
+		if (/^\d+$/.test(segment)) {
+			return Number(segment);
+		}
+
+		return segment.toLowerCase();
+	}) || [value.toLowerCase()];
+}
+
+function compareNaturalStrings(a: string, b: string): number {
+	const aSegments = splitNaturalSegments(a);
+	const bSegments = splitNaturalSegments(b);
+	const maxLength = Math.max(aSegments.length, bSegments.length);
+
+	for (let index = 0; index < maxLength; index += 1) {
+		const aSegment = aSegments[index];
+		const bSegment = bSegments[index];
+		if (aSegment === undefined) {
+			return -1;
+		}
+		if (bSegment === undefined) {
+			return 1;
+		}
+
+		if (typeof aSegment === 'number' && typeof bSegment === 'number') {
+			if (aSegment !== bSegment) {
+				return aSegment - bSegment;
+			}
+			continue;
+		}
+
+		const comparison = String(aSegment).localeCompare(String(bSegment));
+		if (comparison !== 0) {
+			return comparison;
+		}
+	}
+
+	return 0;
+}
+
 function isIgnoredTaskPrefix(prefix: unknown, ignoredPrefixes: string[]): boolean {
 	if (!ignoredPrefixes.length || typeof prefix !== 'string') {
 		return false;
@@ -872,6 +913,20 @@ function isIgnoredTaskPrefix(prefix: unknown, ignoredPrefixes: string[]): boolea
 		const normalizedPattern = pattern.trim().toLowerCase();
 		if (!normalizedPattern) {
 			return false;
+		}
+
+		if (normalizedPattern.includes('--')) {
+			const [startPattern, endPattern] = normalizedPattern.split('--').map((part) => part.trim());
+			if (!startPattern || !endPattern) {
+				return false;
+			}
+
+			const rangeStart = compareNaturalStrings(startPattern, endPattern) <= 0 ? startPattern : endPattern;
+			const rangeEnd = compareNaturalStrings(startPattern, endPattern) <= 0 ? endPattern : startPattern;
+			return (
+				compareNaturalStrings(normalizedPrefix, rangeStart) >= 0 &&
+				compareNaturalStrings(normalizedPrefix, rangeEnd) <= 0
+			);
 		}
 
 		const patternRegex = new RegExp(
