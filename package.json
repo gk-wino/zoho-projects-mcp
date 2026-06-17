@@ -18,6 +18,7 @@
         "list:projects": "./node_modules/.bin/tsx scripts/list-projects.ts",
         "list:tasks": "./node_modules/.bin/tsx scripts/list-tasks.ts",
         "list:tasks:email": "./node_modules/.bin/tsx scripts/list-tasks-by-email.ts",
+        "list:weekdays:email": "./node_modules/.bin/tsx scripts/list-weekdays-without-tasks-by-email.ts",
         "filter:tasks:email-work": "./node_modules/.bin/tsx scripts/filter-tasks-by-email-work.ts",
         "create:generated:timelogs": "./node_modules/.bin/tsx scripts/create-generated-timelogs.ts",
         "debug:timelog": "npm run build && npx tsx scripts/create-timelogs.ts",

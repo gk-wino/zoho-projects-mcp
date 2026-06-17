@@ -362,11 +362,31 @@ async function main() {
 				module_id: draft.module_id,
 				date: draft.date,
 				hours: draft.hours,
+				start_time: draft.start_time,
+				end_time: draft.end_time,
 			})),
 			[
-				{ module_id: 'overlap-1', date: '2026-06-01', hours: '09:00' },
-				{ module_id: 'overlap-2', date: '2026-06-01', hours: '09:00' },
-				{ module_id: 'overlap-3', date: '2026-06-02', hours: '09:00' },
+				{
+					module_id: 'overlap-1',
+					date: '2026-06-01',
+					hours: '06:00',
+					start_time: '08:30',
+					end_time: '14:30',
+				},
+				{
+					module_id: 'overlap-2',
+					date: '2026-06-01',
+					hours: '06:00',
+					start_time: '08:45',
+					end_time: '14:45',
+				},
+				{
+					module_id: 'overlap-3',
+					date: '2026-06-01',
+					hours: '06:00',
+					start_time: '09:00',
+					end_time: '15:00',
+				},
 			],
 		);
 
@@ -480,7 +500,6 @@ async function main() {
 			status: 'Approved',
 			used_created_at_date: false,
 		});
-
 		const generatedSummary = formatGeneratedTimeLogsSummary({
 			email: targetEmail,
 			inputFilePath: inputPath,

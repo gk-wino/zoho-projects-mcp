@@ -503,33 +503,6 @@ function buildSequentialWeekdayDates(startDate: string, count: number): string[]
 	return dates;
 }
 
-function assignDraftDatesWithConstraints(
-	candidateDates: string[],
-	draftDurationsMinutes: number[],
-	dateLoadMinutes: Map<string, number>,
-): string[] {
-	const assignedDates: string[] = [];
-
-	for (let index = 0; index < candidateDates.length; index += 1) {
-		const previousAssignedDate = assignedDates[index - 1];
-		let resolvedDate = moveToNextWeekday(candidateDates[index]);
-
-		if (previousAssignedDate && resolvedDate <= previousAssignedDate) {
-			resolvedDate = getNextWeekday(previousAssignedDate);
-		}
-
-		const draftDurationMinutes = draftDurationsMinutes[index] ?? 0;
-		while ((dateLoadMinutes.get(resolvedDate) || 0) + draftDurationMinutes > MAX_GENERATED_MINUTES_PER_DATE) {
-			resolvedDate = getNextWeekday(resolvedDate);
-		}
-
-		assignedDates.push(resolvedDate);
-		dateLoadMinutes.set(resolvedDate, (dateLoadMinutes.get(resolvedDate) || 0) + draftDurationMinutes);
-	}
-
-	return assignedDates;
-}
-
 function compareGeneratedTimeLogs(a: GeneratedTimeLogDraft, b: GeneratedTimeLogDraft): number {
 	const dateComparison = a.date.localeCompare(b.date);
 	if (dateComparison !== 0) {
@@ -547,6 +520,63 @@ function compareGeneratedTimeLogs(a: GeneratedTimeLogDraft, b: GeneratedTimeLogD
 	}
 
 	return a.log_name.localeCompare(b.log_name);
+}
+
+function redistributeMinutesToFitDailyCap(originalMinutes: number[]): number[] {
+	const totalMinutes = originalMinutes.reduce((sum, minutes) => sum + minutes, 0);
+	if (totalMinutes <= MAX_GENERATED_MINUTES_PER_DATE) {
+		return [...originalMinutes];
+	}
+
+	const scaled = originalMinutes.map((minutes) => (minutes / totalMinutes) * MAX_GENERATED_MINUTES_PER_DATE);
+	const redistributed = scaled.map((minutes) => Math.floor(minutes));
+	let remainingMinutes =
+		MAX_GENERATED_MINUTES_PER_DATE - redistributed.reduce((sum, minutes) => sum + minutes, 0);
+
+	const remainderOrder = scaled
+		.map((minutes, index) => ({ index, remainder: minutes - redistributed[index] }))
+		.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+
+	for (const { index } of remainderOrder) {
+		if (remainingMinutes <= 0) {
+			break;
+		}
+
+		redistributed[index] += 1;
+		remainingMinutes -= 1;
+	}
+
+	return redistributed;
+}
+
+function rebalanceGeneratedTimeLogsForDate(drafts: GeneratedTimeLogDraft[]): void {
+	if (drafts.length === 0) {
+		return;
+	}
+
+	const originalMinutes = drafts.map((draft) => hoursToMinutes(parseHourValue(draft.hours)));
+	const totalMinutes = originalMinutes.reduce((sum, minutes) => sum + minutes, 0);
+	if (totalMinutes <= MAX_GENERATED_MINUTES_PER_DATE) {
+		return;
+	}
+
+	const redistributedMinutes = redistributeMinutesToFitDailyCap(originalMinutes);
+	const startRangeMinutes = GENERATED_START_OFFSET_MINUTES;
+	const hasMultipleDrafts = drafts.length > 1;
+
+	for (let index = 0; index < drafts.length; index += 1) {
+		const draft = drafts[index];
+		const durationMinutes = redistributedMinutes[index];
+		const offsetMinutes = hasMultipleDrafts
+			? Math.round((startRangeMinutes * index) / (drafts.length - 1))
+			: 0;
+		const startMinutes = GENERATED_START_HOUR * 60 + GENERATED_START_MINUTE + offsetMinutes;
+		const endMinutes = startMinutes + durationMinutes;
+
+		draft.hours = formatMinutesAsHours(durationMinutes);
+		draft.start_time = formatTimeOfDay(startMinutes);
+		draft.end_time = formatTimeOfDay(endMinutes);
+	}
 }
 
 function buildGeneratedTimeLogName(task: Task, index: number): string {
@@ -1019,16 +1049,18 @@ export function generateTimeLogDraftsForTask(
 	const anchor = getEffectiveTaskDateAnchor(task, runDate);
 	const planningDates = buildSequentialWeekdayDates(anchor.date, durations.length);
 
-	return durations.map((durationMinutes, index) =>
-		buildDraftFromMinutes(
-			task,
-			planningDates[index],
-			durationMinutes,
-			index,
-			anchor.usedCreatedAtDate,
-			randomFn,
-		),
-	);
+	return durations
+		.map((durationMinutes, index) =>
+			buildDraftFromMinutes(
+				task,
+				planningDates[index],
+				durationMinutes,
+				index,
+				anchor.usedCreatedAtDate,
+				randomFn,
+			),
+		)
+		.sort(compareGeneratedTimeLogs);
 }
 
 export function generateTimeLogDraftsForFilteredTasks(
@@ -1036,10 +1068,10 @@ export function generateTimeLogDraftsForFilteredTasks(
 	options: GenerateTimeLogDraftOptions = {},
 ): GenerateTimeLogDraftsResult {
 	const normalizedShortfallHours = parseThresholdHours(options.acceptableShortfallHours);
+	const runDate = options.runDate || new Date();
 	const taskPlans: GeneratedTimeLogTaskPlan[] = [];
 	const generatedTimeLogs: GeneratedTimeLogDraft[] = [];
 	const sortedFilteredTasks = [...filteredTasks].sort(compareTasks);
-	const dateLoadMinutes = new Map<string, number>();
 
 	for (const task of sortedFilteredTasks) {
 		const currentBillableHours = getTaskBillableHours(task);
@@ -1048,33 +1080,37 @@ export function generateTimeLogDraftsForFilteredTasks(
 		const generatedDrafts = generateTimeLogDraftsForTask(task, {
 			acceptableShortfallHours: normalizedShortfallHours,
 			randomFn: options.randomFn,
-			runDate: options.runDate,
+			runDate,
 		});
 
 		if (generatedDrafts.length === 0) {
 			continue;
 		}
 
-		const assignedDates = assignDraftDatesWithConstraints(
-			generatedDrafts.map((draft) => draft.date),
-			generatedDrafts.map((draft) => hoursToMinutes(parseHourValue(draft.hours))),
-			dateLoadMinutes,
-		);
-		const scheduledDrafts = generatedDrafts
-			.map((draft, index) => ({
-				...draft,
-				date: assignedDates[index],
-			}))
-			.sort(compareGeneratedTimeLogs);
-
 		taskPlans.push({
 			task,
 			currentBillableHours,
 			targetThresholdHours,
 			additionalHoursNeeded,
-			generatedDrafts: scheduledDrafts,
+			generatedDrafts,
 		});
-		generatedTimeLogs.push(...scheduledDrafts);
+		generatedTimeLogs.push(...generatedDrafts);
+	}
+
+	const draftsByDate = new Map<string, GeneratedTimeLogDraft[]>();
+	for (const draft of generatedTimeLogs) {
+		const draftsForDate = draftsByDate.get(draft.date) || [];
+		draftsForDate.push(draft);
+		draftsByDate.set(draft.date, draftsForDate);
+	}
+
+	for (const draftsForDate of draftsByDate.values()) {
+		draftsForDate.sort(compareGeneratedTimeLogs);
+		rebalanceGeneratedTimeLogsForDate(draftsForDate);
+	}
+
+	for (const plan of taskPlans) {
+		plan.generatedDrafts.sort(compareGeneratedTimeLogs);
 	}
 
 	generatedTimeLogs.sort(compareGeneratedTimeLogs);
