@@ -78,6 +78,7 @@ async function main() {
 	const originalClientId = process.env.ZOHO_CLIENT_ID;
 	const originalClientSecret = process.env.ZOHO_CLIENT_SECRET;
 	const originalAccountsDomain = process.env.ZOHO_ACCOUNTS_DOMAIN;
+	const originalOwnerZpuid = process.env.ZOHO_OWNER_ZPUID;
 	const originalFetch = globalThis.fetch;
 
 	try {
@@ -90,6 +91,7 @@ async function main() {
 		process.env.ZOHO_CLIENT_ID = 'test-client-id';
 		process.env.ZOHO_CLIENT_SECRET = 'test-client-secret';
 		process.env.ZOHO_ACCOUNTS_DOMAIN = 'https://accounts.zoho.com';
+		process.env.ZOHO_OWNER_ZPUID = 'test-owner-zpuid';
 
 		assert.equal(resolveTargetEmail(undefined), targetEmail);
 		process.env.TARGET_EMAIL = '  GEOFFREY.KIMANI@VOLANE.COM ';
@@ -136,7 +138,7 @@ async function main() {
 			end_time: '17:00',
 			status: 'Approved',
 			used_created_at_date: false,
-		});
+		}, { ownerZpuid: 'test-owner-zpuid' });
 		assert.deepEqual(Object.keys(payload).sort(), [
 			'bill_status',
 			'date',
@@ -146,12 +148,14 @@ async function main() {
 			'item_id',
 			'log_name',
 			'notes',
+			'owner_zpuid',
 			'project_id',
 			'start_time',
 			'type',
 		]);
 		assert.equal(payload.type, 'task');
 		assert.equal(payload.item_id, 'task-1');
+		assert.equal(payload.owner_zpuid, 'test-owner-zpuid');
 		assert.equal(payload.start_time, '08:30 AM');
 		assert.equal(payload.end_time, '05:00 PM');
 		assert.equal('status' in payload, false);
@@ -173,8 +177,9 @@ async function main() {
 			end_time: '17:00',
 			status: 'Approved',
 			used_created_at_date: false,
-		});
+		}, { ownerZpuid: 'test-owner-zpuid' });
 		assert.equal(generalPayload.type, 'general');
+		assert.equal(generalPayload.owner_zpuid, 'test-owner-zpuid');
 		assert.equal('item_id' in generalPayload, false);
 		assert.equal('force_allow' in generalPayload, false);
 
@@ -464,8 +469,8 @@ async function main() {
 								args.project_id === 'project-start-date' &&
 								args.module_type === 'task' &&
 								args.module_id === 'task-start-date' &&
-								args.start_date === '2026-05-20' &&
-								args.end_date === '2026-05-20';
+								args.start_date === '2026-06-15' &&
+								args.end_date === '2026-06-15';
 							if (isRefreshList && startDateCalls.filter((call) => call.name === 'list_time_logs').length > 1) {
 								return buildListResponse([{ id: 'created-start-date-1', log_name: 'Uses task start date' }]);
 							}
@@ -486,8 +491,8 @@ async function main() {
 			assert.equal(startDateResult.createdCount, 1);
 			assert.equal(startDateFetchCalls.length, 1);
 			const startDateListCall = startDateCalls.find((call) => call.name === 'list_time_logs');
-			assert.equal(startDateListCall?.arguments.start_date, '2026-05-20');
-			assert.equal(startDateListCall?.arguments.end_date, '2026-05-20');
+			assert.equal(startDateListCall?.arguments.start_date, '2026-06-15');
+			assert.equal(startDateListCall?.arguments.end_date, '2026-06-15');
 			const startDateFetchInit = startDateFetchCalls[0]?.init;
 			assert.equal(startDateFetchInit?.method, 'POST');
 			assert.match(String(startDateFetchInit?.body), /log_object=/);
@@ -497,22 +502,22 @@ async function main() {
 			assert.equal(startDateLogObjects.length, 1);
 			assert.equal(startDateLogObjects[0]?.log_name, 'Uses task start date');
 			assert.equal(startDateLogObjects[0]?.type, 'task');
-			assert.equal(startDateLogObjects[0]?.date, '2026-05-20');
+			assert.equal(startDateLogObjects[0]?.date, '2026-06-15');
 			assert.equal(
 				startDateLogObjects[0]?.notes,
-				'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
+				'Time log details: Start Time - 15/06/2026 08:30 AM End time 15/06/2026 05:00 PM Time spent - 08:30',
 			);
 			assert.equal(
 				buildGeneratedTimeLogNotes({
-					date: '2026-05-20',
+					date: '2026-06-15',
 					start_time: '08:30',
 					end_time: '17:00',
 					hours: '08:30',
 				}),
-			'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
+			'Time log details: Start Time - 15/06/2026 08:30 AM End time 15/06/2026 05:00 PM Time spent - 08:30',
 		);
 			const startDateWritten = JSON.parse(await fs.readFile(startDateInputPath, 'utf8'));
-			assert.equal(startDateWritten[0].date, '2026-05-20');
+			assert.equal(startDateWritten[0].date, '2026-06-15');
 			assert.equal(startDateWritten[0].id, 'created-start-date-1');
 			assert.equal(startDateWritten[0].status, 'completed');
 			assert.equal(startDateWritten[1].date, '2026-06-16');
@@ -1075,6 +1080,7 @@ async function main() {
 			new URLSearchParams(String(bulkCreateCall?.init?.body)).get('log_object') || '[]',
 		) as Array<Record<string, unknown>>;
 		const createSuccessEntry = bulkCreateLogObjects.find((entry) => entry.log_name === 'Create success');
+		assert.equal(createSuccessEntry?.owner_zpuid, 'test-owner-zpuid');
 		assert.deepEqual(createSuccessEntry?.force_allow, { overlap: true });
 		assert.equal(
 			createSuccessEntry?.notes,
@@ -1226,6 +1232,12 @@ async function main() {
 			delete process.env.ZOHO_ACCOUNTS_DOMAIN;
 		} else {
 			process.env.ZOHO_ACCOUNTS_DOMAIN = originalAccountsDomain;
+		}
+
+		if (originalOwnerZpuid === undefined) {
+			delete process.env.ZOHO_OWNER_ZPUID;
+		} else {
+			process.env.ZOHO_OWNER_ZPUID = originalOwnerZpuid;
 		}
 
 		globalThis.fetch = originalFetch;

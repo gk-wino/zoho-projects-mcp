@@ -307,20 +307,6 @@ function normalizeModuleType(value: unknown): 'task' | 'issue' | 'general' {
 	return moduleType;
 }
 
-function formatTaskDateValue(value: unknown): string | undefined {
-	if (typeof value !== 'string') {
-		return undefined;
-	}
-
-	const trimmedValue = value.trim();
-	if (!trimmedValue) {
-		return undefined;
-	}
-
-	const isoDateMatch = trimmedValue.match(/^\d{4}-\d{2}-\d{2}/);
-	return isoDateMatch ? isoDateMatch[0] : undefined;
-}
-
 export function formatZohoTime(value: unknown): string {
 	const normalizedValue = normalizeString(value, 'time');
 	const twelveHourMatch = normalizedValue.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -564,27 +550,6 @@ function isSubtaskDraft(
 	return isSubtask(taskLookup.get(`${projectId}::${moduleId}`) || {});
 }
 
-function resolveEffectiveDraftDate(
-	draft: ExecutableGeneratedTimeLogDraft,
-	taskLookup: Map<string, Task>,
-): string {
-	const projectId = normalizeString(draft.project_id, 'project_id');
-	const fallbackDate = normalizeString(draft.date, 'date');
-
-	if (draft.module_type !== 'task') {
-		return fallbackDate;
-	}
-
-	const moduleId = maybeNormalizeModuleId('task', draft.module_id);
-	if (!moduleId) {
-		return fallbackDate;
-	}
-
-	const task = taskLookup.get(`${projectId}::${moduleId}`);
-	const startDate = formatTaskDateValue(task?.start_date);
-	return startDate || fallbackDate;
-}
-
 function buildScopedDraftKey(
 	projectId: string,
 	moduleType: 'task' | 'issue' | 'general',
@@ -703,6 +668,7 @@ export function findMatchingTimeLog(
 
 export function buildBulkCreateTimeLogPayload(
 	draft: ExecutableGeneratedTimeLogDraft,
+	options: { ownerZpuid?: string } = {},
 ): Record<string, unknown> {
 	const moduleType = normalizeModuleType(draft.module_type);
 	const payload: Record<string, unknown> = {
@@ -717,6 +683,10 @@ export function buildBulkCreateTimeLogPayload(
 		notes: buildGeneratedTimeLogNotes(draft),
 	};
 
+	if (options.ownerZpuid) {
+		payload.owner_zpuid = normalizeString(options.ownerZpuid, 'owner_zpuid');
+	}
+
 	if (moduleType !== 'general') {
 		payload.item_id = maybeNormalizeModuleId(moduleType, draft.module_id);
 	}
@@ -728,6 +698,29 @@ export function buildBulkCreateTimeLogPayload(
 	}
 
 	return payload;
+}
+
+async function resolveGeneratedTimeLogOwnerZpuid(
+	email: string,
+	callToolWithDelay: (name: string, args: Record<string, unknown>) => Promise<unknown>,
+): Promise<string> {
+	loadOptionalEnv();
+	const configuredOwnerZpuid = process.env.ZOHO_OWNER_ZPUID?.trim();
+	if (configuredOwnerZpuid) {
+		return configuredOwnerZpuid;
+	}
+
+	const response = await callToolWithDelay('get_user_details', {
+		portal_id: getZohoPortalId(),
+		user_id: email,
+	});
+	const data = parseToolResponse(response) as Record<string, unknown>;
+	const ownerZpuid = data?.zpuid ?? data?.id;
+	if (ownerZpuid === undefined || ownerZpuid === null || !String(ownerZpuid).trim()) {
+		throw new Error(`Could not resolve owner ZPUID for ${email}.`);
+	}
+
+	return String(ownerZpuid).trim();
 }
 
 class ZohoBulkRequestError extends Error {
@@ -1000,7 +993,7 @@ export async function executeGeneratedTimeLogs(
 	const taskLookup = buildTaskLookup(await readTasksFile(tasksFilePath));
 	const eligibleDrafts = getEligibleDraftsInProcessingOrder(drafts, taskLookup);
 	const scopedGroups = buildScopedDraftGroups(eligibleDrafts, (draft) =>
-		resolveEffectiveDraftDate(draft, taskLookup),
+		normalizeString(draft.date, 'date'),
 	);
 	const scopedLogCache = new Map<string, TimeLogListEntry[]>();
 	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts, taskLookup);
@@ -1045,6 +1038,7 @@ export async function executeGeneratedTimeLogs(
 	};
 
 	try {
+		const ownerZpuid = await resolveGeneratedTimeLogOwnerZpuid(email, callToolWithDelay);
 		const pendingCreateDrafts: PendingBulkCreateDraft[] = [];
 
 		for (const draft of eligibleDrafts) {
@@ -1056,8 +1050,7 @@ export async function executeGeneratedTimeLogs(
 				const projectId = normalizeString(draft.project_id, 'project_id');
 				const moduleType = normalizeModuleType(draft.module_type);
 				const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
-				const effectiveDraftDate = resolveEffectiveDraftDate(draft, taskLookup);
-				draft.date = effectiveDraftDate;
+				const effectiveDraftDate = normalizeString(draft.date, 'date');
 				const scopeKey = buildScopedDraftKey(projectId, moduleType, moduleId);
 				const scope = scopedGroups.get(scopeKey);
 
@@ -1185,7 +1178,7 @@ export async function executeGeneratedTimeLogs(
 		const createSingleDraft = async (pendingDraft: PendingBulkCreateDraft): Promise<void> => {
 			try {
 				await createBulkTimeLogsWithRetry(
-					[buildBulkCreateTimeLogPayload(pendingDraft.draft)],
+					[buildBulkCreateTimeLogPayload(pendingDraft.draft, { ownerZpuid })],
 					callWithDelay,
 				);
 				await reconcileDrafts([pendingDraft]);
@@ -1215,7 +1208,9 @@ export async function executeGeneratedTimeLogs(
 		for (const draftBatch of chunkItems(pendingCreateDrafts, BULK_CREATE_MAX_LOG_OBJECTS)) {
 			try {
 				await createBulkTimeLogsWithRetry(
-					draftBatch.map((pendingDraft) => buildBulkCreateTimeLogPayload(pendingDraft.draft)),
+					draftBatch.map((pendingDraft) =>
+						buildBulkCreateTimeLogPayload(pendingDraft.draft, { ownerZpuid }),
+					),
 					callWithDelay,
 				);
 				await reconcileDrafts(draftBatch);
