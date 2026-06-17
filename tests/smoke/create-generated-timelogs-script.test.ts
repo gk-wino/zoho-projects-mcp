@@ -296,19 +296,30 @@ async function main() {
 		assert.equal(limitedWritten[3].id, undefined);
 
 		const startDateTasksPath = path.join(tempDir, 'start-date-tasks.json');
-		await fs.writeFile(
-			startDateTasksPath,
-			`${JSON.stringify(
-				[
-					{
-						id: 'task-start-date',
-						project: { id: 'project-start-date', name: 'Project Start Date' },
-						start_date: '2026-05-20T08:00:00.000Z',
-					},
-				],
-				null,
-				2,
-			)}\n`,
+			await fs.writeFile(
+				startDateTasksPath,
+				`${JSON.stringify(
+					[
+						{
+							id: 'task-start-date',
+							project: { id: 'project-start-date', name: 'Project Start Date' },
+							start_date: '2026-05-20T08:00:00.000Z',
+						},
+						{
+							id: 'task-start-date-sub',
+							project: { id: 'project-start-date', name: 'Project Start Date' },
+							parental_info: {
+								parent_task_id: 'task-start-date',
+								root_task_id: 'task-start-date',
+							},
+							association_info: {
+								has_parents: true,
+							},
+						},
+					],
+					null,
+					2,
+				)}\n`,
 			'utf8',
 		);
 
@@ -331,6 +342,20 @@ async function main() {
 						status: 'Approved',
 						used_created_at_date: false,
 					},
+					{
+						project_id: 'project-start-date',
+						module_type: 'task',
+						module_id: 'task-start-date-sub',
+						task_prefix: 'START-T2',
+						log_name: 'Should be skipped as subtask',
+						date: '2026-06-16',
+						bill_status: 'Billable',
+						hours: '08:30',
+						start_time: '08:30',
+						end_time: '17:00',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
 				],
 				null,
 				2,
@@ -339,12 +364,12 @@ async function main() {
 		);
 
 		const startDateCalls: ToolCall[] = [];
-		const startDateResult = await executeGeneratedTimeLogs(undefined, {
-			inputFilePath: startDateInputPath,
-			tasksFilePath: startDateTasksPath,
-			targetCount: 1,
-			requestDelayMs: 5,
-			sleepFn: async () => {},
+			const startDateResult = await executeGeneratedTimeLogs(undefined, {
+				inputFilePath: startDateInputPath,
+				tasksFilePath: startDateTasksPath,
+				targetCount: 2,
+				requestDelayMs: 5,
+				sleepFn: async () => {},
 			clientFactory: async () => ({
 				client: {
 					callTool: async ({ name, arguments: args }) => {
@@ -366,21 +391,26 @@ async function main() {
 			}),
 		});
 
-		assert.equal(startDateResult.processedCount, 1);
-		assert.equal(startDateResult.createdCount, 1);
-		const startDateListCall = startDateCalls.find((call) => call.name === 'list_time_logs');
-		assert.equal(startDateListCall?.arguments.start_date, '2026-05-20');
-		assert.equal(startDateListCall?.arguments.end_date, '2026-05-20');
+			assert.equal(startDateResult.eligibleBeforeRun, 1);
+			assert.equal(startDateResult.skippedResolved, 1);
+			assert.equal(startDateResult.processedCount, 1);
+			assert.equal(startDateResult.createdCount, 1);
+			const startDateListCall = startDateCalls.find((call) => call.name === 'list_time_logs');
+			assert.equal(startDateListCall?.arguments.start_date, '2026-05-20');
+			assert.equal(startDateListCall?.arguments.end_date, '2026-05-20');
 		const startDateCreateCall = startDateCalls.find((call) => call.name === 'create_time_log');
 		assert.equal(startDateCreateCall?.arguments.date, '2026-05-20');
 		assert.equal(
 			startDateCreateCall?.arguments.notes,
 			'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
 		);
-		const startDateWritten = JSON.parse(await fs.readFile(startDateInputPath, 'utf8'));
-		assert.equal(startDateWritten[0].date, '2026-05-20');
-		assert.equal(startDateWritten[0].id, 'created-start-date-1');
-		assert.equal(startDateWritten[0].status, 'completed');
+			const startDateWritten = JSON.parse(await fs.readFile(startDateInputPath, 'utf8'));
+			assert.equal(startDateWritten[0].date, '2026-05-20');
+			assert.equal(startDateWritten[0].id, 'created-start-date-1');
+			assert.equal(startDateWritten[0].status, 'completed');
+			assert.equal(startDateWritten[1].date, '2026-06-16');
+			assert.equal(startDateWritten[1].id, undefined);
+			assert.equal(startDateWritten[1].status, 'Approved');
 
 		const priorityInputPath = path.join(tempDir, 'priority-generated-timelogs.json');
 		await fs.writeFile(

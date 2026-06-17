@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	type GeneratedTimeLogDraft,
 	type Task,
+	isSubtask,
 	getGeneratedTimeLogsDataPath,
 } from './filter-tasks-by-email-work.ts';
 import { getTasksByEmailDataPath } from './list-tasks-by-email.ts';
@@ -198,28 +199,6 @@ export function isEligibleGeneratedTimeLogDraft(
 	draft: ExecutableGeneratedTimeLogDraft,
 ): boolean {
 	return !isCompletedGeneratedTimeLogDraft(draft) && !hasGeneratedTimeLogId(draft);
-}
-
-function getEligibleDraftsInProcessingOrder(
-	drafts: ExecutableGeneratedTimeLogDraft[],
-): ExecutableGeneratedTimeLogDraft[] {
-	const freshDrafts: ExecutableGeneratedTimeLogDraft[] = [];
-	const retryDrafts: ExecutableGeneratedTimeLogDraft[] = [];
-
-	for (const draft of drafts) {
-		if (!isEligibleGeneratedTimeLogDraft(draft)) {
-			continue;
-		}
-
-		if (draft.status === 'error') {
-			retryDrafts.push(draft);
-			continue;
-		}
-
-		freshDrafts.push(draft);
-	}
-
-	return [...freshDrafts, ...retryDrafts];
 }
 
 export async function readGeneratedTimeLogsFile(
@@ -425,11 +404,16 @@ function addProjectDateMinutes(
 
 function buildResolvedProjectDateMinutes(
 	drafts: ExecutableGeneratedTimeLogDraft[],
+	taskLookup: Map<string, Task>,
 ): Map<string, number> {
 	const projectDateMinutes = new Map<string, number>();
 
 	for (const draft of drafts) {
 		if (!isCompletedGeneratedTimeLogDraft(draft)) {
+			continue;
+		}
+
+		if (isSubtaskDraft(draft, taskLookup)) {
 			continue;
 		}
 
@@ -483,6 +467,23 @@ function buildTaskLookup(tasks: Task[]): Map<string, Task> {
 	}
 
 	return lookup;
+}
+
+function isSubtaskDraft(
+	draft: ExecutableGeneratedTimeLogDraft,
+	taskLookup: Map<string, Task>,
+): boolean {
+	if (draft.module_type !== 'task') {
+		return false;
+	}
+
+	const projectId = normalizeString(draft.project_id, 'project_id');
+	const moduleId = maybeNormalizeModuleId('task', draft.module_id);
+	if (!moduleId) {
+		return false;
+	}
+
+	return isSubtask(taskLookup.get(`${projectId}::${moduleId}`) || {});
 }
 
 function resolveEffectiveDraftDate(
@@ -553,6 +554,33 @@ function buildScopedDraftGroups(
 	}
 
 	return groups;
+}
+
+function getEligibleDraftsInProcessingOrder(
+	drafts: ExecutableGeneratedTimeLogDraft[],
+	taskLookup: Map<string, Task>,
+): ExecutableGeneratedTimeLogDraft[] {
+	const freshDrafts: ExecutableGeneratedTimeLogDraft[] = [];
+	const retryDrafts: ExecutableGeneratedTimeLogDraft[] = [];
+
+	for (const draft of drafts) {
+		if (!isEligibleGeneratedTimeLogDraft(draft)) {
+			continue;
+		}
+
+		if (isSubtaskDraft(draft, taskLookup)) {
+			continue;
+		}
+
+		if (draft.status === 'error') {
+			retryDrafts.push(draft);
+			continue;
+		}
+
+		freshDrafts.push(draft);
+	}
+
+	return [...freshDrafts, ...retryDrafts];
 }
 
 function extractTimeLogId(data: unknown): string | undefined {
@@ -734,11 +762,14 @@ export async function executeGeneratedTimeLogs(
 	const sleepFn = options.sleepFn ?? (async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 	const drafts = await readGeneratedTimeLogsFile(inputFilePath);
 	const taskLookup = buildTaskLookup(await readTasksFile(tasksFilePath));
-	const scopedGroups = buildScopedDraftGroups(drafts, (draft) => resolveEffectiveDraftDate(draft, taskLookup));
+	const eligibleDrafts = getEligibleDraftsInProcessingOrder(drafts, taskLookup);
+	const scopedGroups = buildScopedDraftGroups(eligibleDrafts, (draft) =>
+		resolveEffectiveDraftDate(draft, taskLookup),
+	);
 	const scopedLogCache = new Map<string, TimeLogListEntry[]>();
-	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts);
+	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts, taskLookup);
 	const totalDrafts = drafts.length;
-	const eligibleBeforeRun = drafts.filter(isEligibleGeneratedTimeLogDraft).length;
+	const eligibleBeforeRun = eligibleDrafts.length;
 	const skippedResolved = totalDrafts - eligibleBeforeRun;
 	let processedCount = 0;
 	let matchedExistingCount = 0;
@@ -767,7 +798,7 @@ export async function executeGeneratedTimeLogs(
 	};
 
 	try {
-		for (const draft of getEligibleDraftsInProcessingOrder(drafts)) {
+		for (const draft of eligibleDrafts) {
 			if (targetCount !== 0 && processedCount >= targetCount) {
 				break;
 			}

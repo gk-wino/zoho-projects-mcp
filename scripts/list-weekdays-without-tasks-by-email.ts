@@ -30,8 +30,10 @@ export type MissingWeekdaysSummaryData = {
 	asOfDate: string;
 	totalTasks: number;
 	totalWeekdaysInRange: number;
+	excludedDatesCount: number;
 	coveredWeekdaysCount: number;
 	missingWeekdaysCount: number;
+	excludedDates: MissingWeekdayEntry[];
 	missingWeekdays: MissingWeekdayEntry[];
 };
 
@@ -42,6 +44,20 @@ type WeekdaySummaryOptions = {
 
 const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
 const DEFAULT_TARGET_DATE = '2026-01-02';
+const DEFAULT_KENYA_HOLIDAY_DATES = [
+	'2026-01-01',
+	'2026-03-20',
+	'2026-04-03',
+	'2026-04-06',
+	'2026-05-01',
+	'2026-05-27',
+	'2026-06-01',
+	'2026-10-10',
+	'2026-10-20',
+	'2026-12-12',
+	'2026-12-25',
+	'2026-12-26',
+];
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
@@ -128,6 +144,29 @@ function getCurrentUtcDate(): string {
 	return new Date().toISOString().slice(0, 10);
 }
 
+function parseConfiguredDateList(value: unknown, label: string): string[] {
+	if (value === undefined || value === null) {
+		return [];
+	}
+
+	const normalizedValue = String(value).trim();
+	if (!normalizedValue) {
+		return [];
+	}
+
+	return normalizedValue
+		.split(/[\s,;]+/)
+		.map((entry) => entry.trim())
+		.filter(Boolean)
+		.map((entry) => parseDateString(entry, label));
+}
+
+function getConfiguredExcludedDates(): string[] {
+	loadOptionalEnv();
+	const configuredDates = parseConfiguredDateList(process.env.EXCLUDED_DATES, 'EXCLUDED_DATES');
+	return [...new Set([...DEFAULT_KENYA_HOLIDAY_DATES, ...configuredDates])].sort();
+}
+
 function getSiblingOutputPath(inputFilePath: string, suffix: string): string {
 	const resolvedPath = path.resolve(inputFilePath);
 	const parsedPath = path.parse(resolvedPath);
@@ -183,6 +222,13 @@ function buildWeekdaysInRange(startDate: string, endDate: string): string[] {
 	}
 
 	return dates;
+}
+
+function buildDateEntry(date: string): MissingWeekdayEntry {
+	return {
+		date,
+		weekday: getWeekdayName(date),
+	};
 }
 
 function normalizeTaskDate(value: unknown): string | undefined {
@@ -288,14 +334,15 @@ export async function summarizeMissingWeekdaysByEmail(
 		options.asOfDate?.toISOString().slice(0, 10) || getCurrentUtcDate(),
 		'AS_OF_DATE',
 	);
+	const excludedDates = getConfiguredExcludedDates().filter((date) => date >= targetDate && date <= asOfDate);
+	const excludedDateSet = new Set(excludedDates);
 	const weekdayRange = buildWeekdaysInRange(targetDate, asOfDate);
 	const taskWeekdays = collectTaskWeekdays(tasks);
-	const missingWeekdays = weekdayRange
-		.filter((date) => !taskWeekdays.has(date))
-		.map((date) => ({
-			date,
-			weekday: getWeekdayName(date),
-		}));
+	const relevantWeekdays = weekdayRange.filter((date) => !excludedDateSet.has(date));
+	const filteredTaskWeekdays = new Set([...taskWeekdays].filter((date) => !excludedDateSet.has(date)));
+	const missingWeekdays = relevantWeekdays
+		.filter((date) => !filteredTaskWeekdays.has(date))
+		.map(buildDateEntry);
 
 	return {
 		email: normalizedEmail,
@@ -305,8 +352,10 @@ export async function summarizeMissingWeekdaysByEmail(
 		asOfDate,
 		totalTasks: tasks.length,
 		totalWeekdaysInRange: weekdayRange.length,
-		coveredWeekdaysCount: taskWeekdays.size,
+		excludedDatesCount: excludedDates.length,
+		coveredWeekdaysCount: filteredTaskWeekdays.size,
 		missingWeekdaysCount: missingWeekdays.length,
+		excludedDates: excludedDates.map(buildDateEntry),
 		missingWeekdays,
 	};
 }
@@ -320,6 +369,7 @@ export function formatMissingWeekdaysSummary(data: MissingWeekdaysSummaryData): 
 		`- Summary Markdown Path: ${data.summaryFilePath}`,
 		`- Target Date: ${data.targetDate}`,
 		`- As Of Date: ${data.asOfDate}`,
+		`- Excluded Dates Count: ${data.excludedDatesCount}`,
 		'',
 		'## Summary Metrics',
 		'',
@@ -327,12 +377,28 @@ export function formatMissingWeekdaysSummary(data: MissingWeekdaysSummaryData): 
 		'| --- | ---: |',
 		`| Tasks Considered | ${data.totalTasks} |`,
 		`| Weekdays In Range | ${data.totalWeekdaysInRange} |`,
+		`| Excluded Dates | ${data.excludedDatesCount} |`,
 		`| Weekdays With Tasks | ${data.coveredWeekdaysCount} |`,
 		`| Weekdays With No Tasks | ${data.missingWeekdaysCount} |`,
 		'',
-		'## Weekdays With No Tasks',
+		'## Excluded Dates',
 		'',
 	];
+
+	if (data.excludedDates.length === 0) {
+		lines.push('No excluded dates were configured.');
+	} else {
+		lines.push('| Date | Weekday |');
+		lines.push('| --- | --- |');
+		for (const entry of data.excludedDates) {
+			lines.push(`| ${entry.date} | ${entry.weekday} |`);
+		}
+	}
+
+	lines.push(
+		'## Weekdays With No Tasks',
+		'',
+	);
 
 	if (data.missingWeekdays.length === 0) {
 		lines.push('No missing weekdays were found for the selected date range.');

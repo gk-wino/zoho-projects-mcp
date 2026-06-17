@@ -126,7 +126,7 @@ export function getTasksDataPath(projectId: string): string {
 
 export async function listProjectTasks(
 	projectId: string,
-	perPage: number = 100,
+	perPage: number = 200,
 ): Promise<TaskListResponse> {
 	const normalizedProjectId = requireProjectId(projectId);
 	loadEnv();
@@ -209,9 +209,7 @@ async function main(): Promise<void> {
 	}
 }
 
-const isEntrypoint = process.argv[1]
-	? path.resolve(process.argv[1]) === __filename
-	: false;
+const isEntrypoint = process.argv[1] ? path.resolve(process.argv[1]) === __filename : false;
 
 if (isEntrypoint) {
 	await main();

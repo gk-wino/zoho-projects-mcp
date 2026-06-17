@@ -26,6 +26,21 @@ type TaskDuration = {
 	type?: string;
 };
 
+type TaskParentalInfo = {
+	parent_task_id?: string;
+	root_task_id?: string;
+};
+
+type TaskAssociationInfo = {
+	has_parents?: boolean;
+	has_subtasks?: boolean;
+};
+
+type TaskSequence = {
+	subtask_sequence?: number;
+	sequence?: number;
+};
+
 type TaskLogHours = {
 	billable_hours?: string | number;
 	non_billable_hours?: string | number;
@@ -49,6 +64,9 @@ export type Task = Record<string, unknown> & {
 	completed_date?: string;
 	closed_date?: string;
 	last_updated_time?: string;
+	parental_info?: TaskParentalInfo;
+	association_info?: TaskAssociationInfo;
+	sequence?: TaskSequence;
 	log_hours?: TaskLogHours;
 	owners_and_work?: {
 		owners?: TaskOwner[];
@@ -62,6 +80,7 @@ export type Task = Record<string, unknown> & {
 export type FilterTasksByEmailWorkResult = {
 	allTasks: Task[];
 	matchingTasks: Task[];
+	ignoredTasks: Task[];
 	excludedTasks: Task[];
 	eligibleTasks: Task[];
 	filteredTasks: Task[];
@@ -129,6 +148,7 @@ const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
 const DEFAULT_HOURS_PER_DAY = 9.5;
 const DEFAULT_ACCEPTABLE_SHORTFALL_HOURS = 4;
 const DEFAULT_GENERATED_TIMELOG_MAX_DAILY_HOURS = 9;
+const DEFAULT_IGNORED_TASK_PREFIXES: string[] = [];
 const FULL_DAY_MIN_HOURS = 7;
 const FULL_DAY_MAX_HOURS = 14;
 const ZERO_DURATION_MIN_HOURS = 7;
@@ -146,7 +166,7 @@ const GENERATED_END_MAX_MINUTE = 0;
 const GENERATED_MINIMUM_END_HOUR = 17;
 const MAX_GENERATED_DRAFT_HOURS = 17 + 59 / 60;
 const MAX_GENERATED_MINUTES_PER_DATE = 18 * 60;
-const EXCLUDED_STATUSES = new Set(['open', 'on hold']);
+const EXCLUDED_STATUSES = new Set(['open', 'on hold', 'in progress']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
@@ -204,6 +224,23 @@ function parseNonNegativeNumber(value: unknown, fallback: number, label: string)
 	return parsedValue;
 }
 
+function parseDelimitedList(value: unknown, label: string): string[] {
+	if (value === undefined || value === null) {
+		return [];
+	}
+
+	const normalizedValue = String(value).trim();
+	if (!normalizedValue) {
+		return [];
+	}
+
+	return normalizedValue
+		.split(/[\s,;]+/)
+		.map((entry) => entry.trim())
+		.filter(Boolean)
+		.map((entry) => entry.toLowerCase());
+}
+
 function getConfiguredHoursPerDay(): number {
 	loadOptionalEnv();
 	return parseNonNegativeNumber(process.env.HOURS_PER_DAY, DEFAULT_HOURS_PER_DAY, 'HOURS_PER_DAY');
@@ -225,6 +262,12 @@ function getConfiguredGeneratedTimeLogMaxDailyHours(): number {
 		DEFAULT_GENERATED_TIMELOG_MAX_DAILY_HOURS,
 		'GENERATED_TIMELOG_MAX_DAILY_HOURS',
 	);
+}
+
+function getConfiguredIgnoredTaskPrefixes(): string[] {
+	loadOptionalEnv();
+	const configuredPrefixes = parseDelimitedList(process.env.IGNORED_TASK_PREFIXES, 'IGNORED_TASK_PREFIXES');
+	return [...new Set([...DEFAULT_IGNORED_TASK_PREFIXES, ...configuredPrefixes])];
 }
 
 export function parseThresholdHours(value: unknown): number {
@@ -418,6 +461,18 @@ function getTaskOwnedFallbackDate(task: Task): string {
 	}
 
 	return 'N/A';
+}
+
+export function isSubtask(task: Task): boolean {
+	if (task.parental_info?.parent_task_id) {
+		return true;
+	}
+
+	if (task.association_info?.has_parents) {
+		return true;
+	}
+
+	return typeof task.sequence?.subtask_sequence === 'number';
 }
 
 function addDays(date: string, days: number): string {
@@ -799,6 +854,34 @@ export function isExcludedStatus(task: Task): boolean {
 	return EXCLUDED_STATUSES.has(normalizedStatus);
 }
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isIgnoredTaskPrefix(prefix: unknown, ignoredPrefixes: string[]): boolean {
+	if (!ignoredPrefixes.length || typeof prefix !== 'string') {
+		return false;
+	}
+
+	const normalizedPrefix = prefix.trim().toLowerCase();
+	if (!normalizedPrefix) {
+		return false;
+	}
+
+	return ignoredPrefixes.some((pattern) => {
+		const normalizedPattern = pattern.trim().toLowerCase();
+		if (!normalizedPattern) {
+			return false;
+		}
+
+		const patternRegex = new RegExp(
+			`^${escapeRegExp(normalizedPattern).replace(/\\\*/g, '.*')}$`,
+			'i',
+		);
+		return patternRegex.test(normalizedPrefix);
+	});
+}
+
 export function getTaskBillableHours(task: Task): number {
 	return parseHourValue(task.log_hours?.billable_hours);
 }
@@ -859,6 +942,7 @@ export async function filterTasksByEmailWork(
 	const normalizedEmail = requireEmail(email);
 	const resolvedInputPath = resolveInputFilePath(normalizedEmail, inputFilePath);
 	const normalizedShortfallHours = parseThresholdHours(acceptableShortfallHours);
+	const ignoredTaskPrefixes = getConfiguredIgnoredTaskPrefixes();
 	const fileContents = await fsp.readFile(resolvedInputPath, 'utf8');
 	const parsedData = JSON.parse(fileContents);
 
@@ -867,8 +951,15 @@ export async function filterTasksByEmailWork(
 	}
 
 	const allTasks = parsedData as Task[];
-	const matchingTasks = allTasks.filter((task) => taskMatchesEmail(task, normalizedEmail));
-	const sortedMatchingTasks = [...matchingTasks].sort(compareTasks);
+	const matchingTasks = allTasks.filter(
+		(task) => taskMatchesEmail(task, normalizedEmail) && !isSubtask(task),
+	);
+	const ignoredTasks = matchingTasks.filter((task) => isIgnoredTaskPrefix(task.prefix, ignoredTaskPrefixes));
+	const filteredMatchingTasks = matchingTasks.filter(
+		(task) => !isIgnoredTaskPrefix(task.prefix, ignoredTaskPrefixes),
+	);
+	const sortedMatchingTasks = [...filteredMatchingTasks].sort(compareTasks);
+	const sortedIgnoredTasks = [...ignoredTasks].sort(compareTasks);
 	const excludedTasks = sortedMatchingTasks.filter((task) => isExcludedStatus(task));
 	const eligibleTasks = sortedMatchingTasks.filter((task) => !isExcludedStatus(task));
 	const filteredTasks = eligibleTasks.filter((task) =>
@@ -881,6 +972,7 @@ export async function filterTasksByEmailWork(
 	return {
 		allTasks,
 		matchingTasks: sortedMatchingTasks,
+		ignoredTasks: sortedIgnoredTasks,
 		excludedTasks,
 		eligibleTasks,
 		filteredTasks,
@@ -901,6 +993,7 @@ export async function writeFilteredTasksByEmailFile(
 export function formatFilteredTasksByEmailSummary(data: FilteredTasksSummaryData): string {
 	const zeroBillableTasks = data.filteredTasks.filter((task) => getTaskBillableHours(task) <= 0);
 	const partiallyLoggedTasks = data.filteredTasks.filter((task) => getTaskBillableHours(task) > 0);
+	const ignoredTasks = data.ignoredTasks || [];
 	const lines = [
 		'# Underallocated Tasks Summary',
 		'',
@@ -916,7 +1009,8 @@ export function formatFilteredTasksByEmailSummary(data: FilteredTasksSummaryData
 		'| --- | ---: |',
 		`| Initial Task Count | ${data.allTasks.length} |`,
 		`| Validated Email-Matching Task Count | ${data.matchingTasks.length} |`,
-		`| Excluded Status Count (Open/On Hold) | ${data.excludedTasks.length} |`,
+		`| Ignored Prefix Task Count | ${ignoredTasks.length} |`,
+		`| Excluded Status Count (Open/On Hold/In Progress) | ${data.excludedTasks.length} |`,
 		`| Eligible Task Count | ${data.eligibleTasks.length} |`,
 		`| Filtered Task Count | ${data.filteredTasks.length} |`,
 		`| Tasks With Zero Billable Hours Logged | ${zeroBillableTasks.length} |`,
@@ -1024,6 +1118,7 @@ export async function writeFilteredTasksByEmailSummaryFile(
 		acceptableShortfallHours: data.acceptableShortfallHours,
 		allTasks: data.allTasks,
 		matchingTasks: data.matchingTasks,
+		ignoredTasks: data.ignoredTasks,
 		excludedTasks: data.excludedTasks,
 		eligibleTasks: data.eligibleTasks,
 		filteredTasks: data.filteredTasks,

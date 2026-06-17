@@ -47,11 +47,13 @@ async function main() {
 	const originalHoursPerDay = process.env.HOURS_PER_DAY;
 	const originalAcceptableShortfallHours = process.env.ACCEPTABLE_SHORTFALL_HOURS;
 	const originalGeneratedMaxDailyHours = process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS;
+	const originalIgnoredTaskPrefixes = process.env.IGNORED_TASK_PREFIXES;
 
 	try {
 		delete process.env.HOURS_PER_DAY;
 		delete process.env.ACCEPTABLE_SHORTFALL_HOURS;
 		delete process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS;
+		delete process.env.IGNORED_TASK_PREFIXES;
 
 		await assert.rejects(
 			() => filterTasksByEmailWork('', path.resolve('data/test.json')),
@@ -155,6 +157,37 @@ async function main() {
 					owners: [{ email: targetEmail, name: 'Geoffrey' }],
 				},
 				created_by: { email: 'someone.else@volane.com', name: 'Someone Else' },
+			},
+			{
+				id: 'task-2-sub',
+				prefix: 'ALPHA-T2-SUB',
+				name: 'Subtask should be excluded',
+				project: { id: 'project-alpha', name: 'Project Alpha' },
+				tasklist: { id: 'tasklist-sprint-1', name: 'Sprint 1' },
+				parental_info: {
+					parent_task_id: 'task-2',
+					root_task_id: 'task-2',
+				},
+				association_info: {
+					has_parents: true,
+				},
+				sequence: {
+					subtask_sequence: 1,
+				},
+				status: { name: 'Closed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-02T04:00:00.000Z',
+				end_date: '2026-06-02T13:30:00.000Z',
+				created_time: '2026-05-31T09:00:00.000Z',
+				log_hours: {
+					billable_hours: '00:00',
+					non_billable_hours: '00:00',
+					total_hours: '00:00',
+				},
+				owners_and_work: {
+					owners: [{ email: targetEmail, name: 'Geoffrey' }],
+				},
+				created_by: { email: targetEmail, name: 'Geoffrey' },
 			},
 			{
 				id: 'task-3',
@@ -280,23 +313,83 @@ async function main() {
 				},
 				created_by: { email: targetEmail, name: 'Geoffrey' },
 			},
+			{
+				id: 'task-10',
+				prefix: 'PP3-T594',
+				name: 'Ignored exact prefix task',
+				project: { id: 'project-gamma', name: 'Project Gamma' },
+				tasklist: { id: 'tasklist-gamma', name: 'Gamma' },
+				status: { name: 'Closed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-11T04:00:00.000Z',
+				end_date: '2026-06-11T13:30:00.000Z',
+				created_time: '2026-06-07T09:00:00.000Z',
+				log_hours: {
+					billable_hours: '00:00',
+					non_billable_hours: '00:00',
+					total_hours: '00:00',
+				},
+				owners_and_work: {
+					owners: [{ email: targetEmail, name: 'Geoffrey' }],
+				},
+				created_by: { email: targetEmail, name: 'Geoffrey' },
+			},
+			{
+				id: 'task-11',
+				prefix: 'PP3-T595',
+				name: 'Ignored wildcard prefix task',
+				project: { id: 'project-gamma', name: 'Project Gamma' },
+				tasklist: { id: 'tasklist-gamma', name: 'Gamma' },
+				status: { name: 'Closed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-12T04:00:00.000Z',
+				end_date: '2026-06-12T13:30:00.000Z',
+				created_time: '2026-06-08T09:00:00.000Z',
+				log_hours: {
+					billable_hours: '00:00',
+					non_billable_hours: '00:00',
+					total_hours: '00:00',
+				},
+				owners_and_work: {
+					owners: [{ email: targetEmail, name: 'Geoffrey' }],
+				},
+				created_by: { email: targetEmail, name: 'Geoffrey' },
+			},
 		];
 
+		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
 		await fs.writeFile(inputPath, `${JSON.stringify(fixtureTasks, null, 2)}\n`, 'utf8');
 
 		const filterResult = await filterTasksByEmailWork(undefined, inputPath);
-		assert.equal(filterResult.allTasks.length, 9);
+		assert.equal(filterResult.allTasks.length, 12);
 		assert.equal(filterResult.matchingTasks.length, 8);
-		assert.equal(filterResult.excludedTasks.length, 2);
-		assert.equal(filterResult.eligibleTasks.length, 6);
+		assert.equal(filterResult.ignoredTasks.length, 2);
+		assert.equal(filterResult.excludedTasks.length, 3);
+		assert.equal(filterResult.eligibleTasks.length, 5);
 		assert.equal(filterResult.filteredTasks.length, 4);
-		assert.equal(filterResult.compliantTasks.length, 2);
+		assert.equal(filterResult.compliantTasks.length, 1);
+		assert.equal(
+			filterResult.matchingTasks.some((task) => task.id === 'task-2-sub'),
+			false,
+		);
+		assert.equal(
+			filterResult.filteredTasks.some((task) => task.id === 'task-2-sub'),
+			false,
+		);
+		assert.equal(
+			filterResult.matchingTasks.some((task) => task.id === 'task-10'),
+			false,
+		);
+		assert.equal(
+			filterResult.matchingTasks.some((task) => task.id === 'task-11'),
+			false,
+		);
 		assert.deepEqual(
 			filterResult.filteredTasks.map((task) => task.id),
 			['task-1', 'task-5', 'task-6', 'task-8'],
 		);
 		const unsortedGenerationResult = generateTimeLogDraftsForFilteredTasks(
-			[fixtureTasks[1], fixtureTasks[0], fixtureTasks[5]],
+			[fixtureTasks[1], fixtureTasks[0], fixtureTasks[6]],
 			{
 				randomFn: createRandomFn(...Array(30).fill(1)),
 				runDate: fixedRunDate,
@@ -312,7 +405,7 @@ async function main() {
 		);
 		assert.deepEqual(
 			filterResult.compliantTasks.map((task) => task.id),
-			['task-2', 'task-3'],
+			['task-3'],
 		);
 		assert.equal(getAdditionalBillableHoursNeeded(filterResult.filteredTasks[0]), 5.5);
 		assert.equal(getAdditionalBillableHoursNeeded(filterResult.filteredTasks[1]), 0);
@@ -555,6 +648,7 @@ async function main() {
 		assert.equal(await fs.readFile(generatedSummaryPath, 'utf8'), generatedSummary);
 
 		assert.match(filteredSummary, /Filtered Task Count\s*\|\s*4/);
+		assert.match(filteredSummary, /Ignored Prefix Task Count\s*\|\s*2/);
 		assert.match(filteredSummary, /### Project: Project Alpha \(project-alpha\)/);
 		assert.match(filteredSummary, /### Project: Project Omega \(project-omega\)/);
 		assert.match(generatedSummary, /Tasks Needing Generated Timelogs\s*\|\s*3/);
@@ -574,19 +668,20 @@ async function main() {
 		process.env.HOURS_PER_DAY = '8';
 		process.env.ACCEPTABLE_SHORTFALL_HOURS = '1';
 		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = '7.5';
+		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
 		assert.equal(parseThresholdHours(undefined), 1);
 
 		const envFilterResult = await filterTasksByEmailWork(undefined, inputPath);
-		assert.equal(envFilterResult.filteredTasks.length, 5);
+		assert.equal(envFilterResult.filteredTasks.length, 4);
 		assert.deepEqual(
 			envFilterResult.filteredTasks.map((task) => task.id),
-			['task-1', 'task-2', 'task-5', 'task-6', 'task-8'],
+			['task-1', 'task-5', 'task-6', 'task-8'],
 		);
 		const envGenerationResult = generateTimeLogDraftsForFilteredTasks(envFilterResult.filteredTasks, {
 			randomFn: createRandomFn(...Array(40).fill(1)),
 			runDate: fixedRunDate,
 		});
-		assert.equal(envGenerationResult.totalGeneratedTimeLogs, 7);
+		assert.equal(envGenerationResult.totalGeneratedTimeLogs, 6);
 		assert.ok(
 			envGenerationResult.generatedTimeLogs.every(
 				(draft) => parseHourValue(draft.hours) >= 8 && parseHourValue(draft.hours) <= 9.5,
@@ -618,6 +713,7 @@ async function main() {
 		);
 
 		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = '14';
+		process.env.IGNORED_TASK_PREFIXES = 'PP3-T594,PP3-*';
 		const fourteenHourDrafts = generateTimeLogDraftsForTask(fixtureTasks[1], {
 			randomFn: createRandomFn(1, 1, 1, 1, 1, 1, 1, 1),
 			runDate: fixedRunDate,
@@ -656,6 +752,12 @@ async function main() {
 			delete process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS;
 		} else {
 			process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = originalGeneratedMaxDailyHours;
+		}
+
+		if (originalIgnoredTaskPrefixes === undefined) {
+			delete process.env.IGNORED_TASK_PREFIXES;
+		} else {
+			process.env.IGNORED_TASK_PREFIXES = originalIgnoredTaskPrefixes;
 		}
 	}
 }
