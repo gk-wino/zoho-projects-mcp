@@ -14,6 +14,7 @@ import {
 	getGeneratedTimeLogsDataPath,
 } from './filter-tasks-by-email-work.ts';
 import { getTasksByEmailDataPath } from './list-tasks-by-email.ts';
+import { requestZohoAccessTokenRefresh } from './refresh-token.ts';
 
 type ExecutableGeneratedTimeLogDraft = Omit<GeneratedTimeLogDraft, 'status'> & {
 	id?: number | string;
@@ -33,6 +34,17 @@ type ScopedDraftGroup = {
 	moduleId?: string;
 	startDate: string;
 	endDate: string;
+};
+
+type PendingBulkCreateDraft = {
+	draft: ExecutableGeneratedTimeLogDraft;
+	projectId: string;
+	moduleType: 'task' | 'issue' | 'general';
+	moduleId?: string;
+	effectiveDraftDate: string;
+	scopeKey: string;
+	scope: ScopedDraftGroup;
+	draftMinutes: number;
 };
 
 type ToolResponse = {
@@ -82,7 +94,10 @@ const DEFAULT_TARGET_TIMELOG_COUNT = 1;
 const DEFAULT_REQUEST_DELAY_MS = 1000;
 const LIST_TIME_LOGS_PER_PAGE = 200;
 const DAILY_LOG_LIMIT_MINUTES = 24 * 60;
+const BULK_CREATE_MAX_LOG_OBJECTS = 100;
 const REQUIRED_ENV_VARS = ['ZOHO_ACCESS_TOKEN', 'ZOHO_PORTAL_ID'];
+const DEFAULT_ZOHO_API_DOMAIN = 'https://projectsapi.zoho.com';
+const DEFAULT_ZOHO_ACCOUNTS_DOMAIN = 'https://accounts.zoho.com';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
@@ -153,6 +168,42 @@ export function parseTargetTimeLogCount(value: unknown): number {
 export function getConfiguredTargetTimeLogCount(): number {
 	loadOptionalEnv();
 	return parseTargetTimeLogCount(process.env.TARGET_TIMELOG_COUNT);
+}
+
+function parseBooleanEnvValue(value: unknown, defaultValue: boolean = false): boolean {
+	if (typeof value === 'boolean') {
+		return value;
+	}
+
+	if (value === undefined || value === null) {
+		return defaultValue;
+	}
+
+	const normalizedValue = String(value).trim().toLowerCase();
+	if (!normalizedValue) {
+		return defaultValue;
+	}
+
+	if (['1', 'true', 'yes', 'y', 'on'].includes(normalizedValue)) {
+		return true;
+	}
+
+	if (['0', 'false', 'no', 'n', 'off'].includes(normalizedValue)) {
+		return false;
+	}
+
+	return defaultValue;
+}
+
+export function getConfiguredGeneratedTimeLogForceAllowOverlap(): boolean {
+	loadOptionalEnv();
+	return parseBooleanEnvValue(process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP, false);
+}
+
+function getConfiguredZohoApiDomain(): string {
+	loadOptionalEnv();
+	const configuredValue = process.env.ZOHO_API_DOMAIN?.trim();
+	return configuredValue || DEFAULT_ZOHO_API_DOMAIN;
 }
 
 export function getGeneratedTimeLogsInputPath(email: string, inputFilePath?: string): string {
@@ -623,13 +674,13 @@ export function findMatchingTimeLog(
 	});
 }
 
-export function buildCreateTimeLogPayload(
+export function buildBulkCreateTimeLogPayload(
 	draft: ExecutableGeneratedTimeLogDraft,
 ): Record<string, unknown> {
 	const moduleType = normalizeModuleType(draft.module_type);
 	const payload: Record<string, unknown> = {
 		project_id: normalizeString(draft.project_id, 'project_id'),
-		module_type: moduleType,
+		type: moduleType,
 		log_name: normalizeString(draft.log_name, 'log_name'),
 		date: normalizeString(draft.date, 'date'),
 		bill_status: normalizeString(draft.bill_status, 'bill_status'),
@@ -641,10 +692,167 @@ export function buildCreateTimeLogPayload(
 	};
 
 	if (moduleType !== 'general') {
-		payload.module_id = maybeNormalizeModuleId(moduleType, draft.module_id);
+		payload.item_id = maybeNormalizeModuleId(moduleType, draft.module_id);
+	}
+
+	if (getConfiguredGeneratedTimeLogForceAllowOverlap()) {
+		payload.force_allow = {
+			overlap: true,
+		};
 	}
 
 	return payload;
+}
+
+class ZohoBulkRequestError extends Error {
+	status: number;
+	responseBody: unknown;
+
+	constructor(status: number, responseBody: unknown) {
+		const serializedBody =
+			typeof responseBody === 'string'
+				? responseBody
+				: responseBody === undefined
+					? ''
+					: JSON.stringify(responseBody);
+		super(`Zoho bulk time log API error: ${status}${serializedBody ? ` - ${serializedBody}` : ''}`);
+		this.name = 'ZohoBulkRequestError';
+		this.status = status;
+		this.responseBody = responseBody;
+	}
+}
+
+function getZohoAccessToken(): string {
+	loadOptionalEnv();
+	const accessToken = process.env.ZOHO_ACCESS_TOKEN?.trim();
+	if (!accessToken) {
+		throw new Error('Missing required environment variables: ZOHO_ACCESS_TOKEN');
+	}
+
+	return accessToken;
+}
+
+function getZohoPortalId(): string {
+	loadOptionalEnv();
+	const portalId = process.env.ZOHO_PORTAL_ID?.trim();
+	if (!portalId) {
+		throw new Error('Missing required environment variables: ZOHO_PORTAL_ID');
+	}
+
+	return portalId;
+}
+
+function canRefreshZohoAccessToken(): boolean {
+	loadOptionalEnv();
+	return Boolean(
+		process.env.ZOHO_REFRESH_TOKEN?.trim() &&
+			process.env.ZOHO_CLIENT_ID?.trim() &&
+			process.env.ZOHO_CLIENT_SECRET?.trim(),
+	);
+}
+
+async function refreshZohoAccessToken(
+	callWithDelay: <T>(operation: () => Promise<T>) => Promise<T>,
+): Promise<string> {
+	loadOptionalEnv();
+	if (!canRefreshZohoAccessToken()) {
+		throw new Error(
+			'Cannot refresh Zoho access token: missing ZOHO_REFRESH_TOKEN, ZOHO_CLIENT_ID, or ZOHO_CLIENT_SECRET.',
+		);
+	}
+
+	const refreshResult = await callWithDelay(() =>
+		requestZohoAccessTokenRefresh({
+			refreshToken: process.env.ZOHO_REFRESH_TOKEN!.trim(),
+			clientId: process.env.ZOHO_CLIENT_ID!.trim(),
+			clientSecret: process.env.ZOHO_CLIENT_SECRET!.trim(),
+			accountsDomain: (process.env.ZOHO_ACCOUNTS_DOMAIN || DEFAULT_ZOHO_ACCOUNTS_DOMAIN).trim(),
+		}),
+	);
+
+	process.env.ZOHO_ACCESS_TOKEN = refreshResult.accessToken;
+	return refreshResult.accessToken;
+}
+
+async function parseZohoResponseBody(response: Response): Promise<unknown> {
+	const text = await response.text();
+	if (!text) {
+		return undefined;
+	}
+
+	try {
+		return JSON.parse(text);
+	} catch {
+		return text;
+	}
+}
+
+async function postBulkTimeLogs(
+	logObjects: Record<string, unknown>[],
+): Promise<unknown> {
+	const apiDomain = getConfiguredZohoApiDomain();
+	const portalId = getZohoPortalId();
+	const accessToken = getZohoAccessToken();
+	const body = new URLSearchParams({
+		log_object: JSON.stringify(logObjects),
+	});
+	const response = await fetch(`${apiDomain}/api/v3/portal/${portalId}/addbulktimelogs`, {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/x-www-form-urlencoded',
+		},
+		body: body.toString(),
+	});
+	const responseBody = await parseZohoResponseBody(response);
+
+	if (!response.ok) {
+		throw new ZohoBulkRequestError(response.status, responseBody);
+	}
+
+	return responseBody;
+}
+
+async function createBulkTimeLogsWithRetry(
+	logObjects: Record<string, unknown>[],
+	callWithDelay: <T>(operation: () => Promise<T>) => Promise<T>,
+): Promise<unknown> {
+	try {
+		return await callWithDelay(() => postBulkTimeLogs(logObjects));
+	} catch (error) {
+		if (
+			error instanceof ZohoBulkRequestError &&
+			error.status === 401 &&
+			canRefreshZohoAccessToken()
+		) {
+			console.error('Received 401 from bulk time log API, attempting token refresh...');
+			await refreshZohoAccessToken(callWithDelay);
+			return await callWithDelay(() => postBulkTimeLogs(logObjects));
+		}
+
+		throw error;
+	}
+}
+
+function chunkItems<T>(items: T[], chunkSize: number): T[][] {
+	const chunks: T[][] = [];
+	for (let index = 0; index < items.length; index += chunkSize) {
+		chunks.push(items.slice(index, index + chunkSize));
+	}
+	return chunks;
+}
+
+async function refreshScopedLogs(
+	scopeKey: string,
+	scope: ScopedDraftGroup,
+	scopedLogCache: Map<string, TimeLogListEntry[]>,
+	client: McpToolClient,
+	callToolWithDelay: (name: string, args: Record<string, unknown>) => Promise<unknown>,
+): Promise<TimeLogListEntry[]> {
+	scopedLogCache.delete(scopeKey);
+	const refreshedLogs = await listScopedTimeLogs(client, scope, callToolWithDelay);
+	scopedLogCache.set(scopeKey, refreshedLogs);
+	return refreshedLogs;
 }
 
 async function createMcpClient(): Promise<McpClientConnection> {
@@ -752,6 +960,8 @@ export async function executeGeneratedTimeLogs(
 	explicitEmail?: string,
 	options: ExecuteGeneratedTimeLogsOptions = {},
 ): Promise<ExecuteGeneratedTimeLogsResult> {
+	loadOptionalEnv();
+	requireConfiguredEnv();
 	const email = resolveTargetEmail(explicitEmail);
 	const inputFilePath = getGeneratedTimeLogsInputPath(email, options.inputFilePath);
 	const tasksFilePath = getTasksInputPath(email, options.tasksFilePath);
@@ -781,36 +991,48 @@ export async function executeGeneratedTimeLogs(
 		? await options.clientFactory()
 		: await createMcpClient();
 
-	const callToolWithDelay = async (
-		name: string,
-		args: Record<string, unknown>,
-	): Promise<unknown> => {
+	const callWithDelay = async <T>(
+		operation: () => Promise<T>,
+	): Promise<T> => {
 		if (previousZohoCallCompleted) {
 			await sleepFn(requestDelayMs);
 		}
 
-		const response = await connection.client.callTool({
-			name,
-			arguments: args,
-		});
-		previousZohoCallCompleted = true;
-		return response;
+		try {
+			return await operation();
+		} finally {
+			previousZohoCallCompleted = true;
+		}
+	};
+
+	const callToolWithDelay = async (
+		name: string,
+		args: Record<string, unknown>,
+	): Promise<unknown> => {
+		return await callWithDelay(() =>
+			connection.client.callTool({
+				name,
+				arguments: args,
+			}),
+		);
 	};
 
 	try {
+		const pendingCreateDrafts: PendingBulkCreateDraft[] = [];
+
 		for (const draft of eligibleDrafts) {
 			if (targetCount !== 0 && processedCount >= targetCount) {
 				break;
 			}
 
-				try {
-					const projectId = normalizeString(draft.project_id, 'project_id');
-					const moduleType = normalizeModuleType(draft.module_type);
-					const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
-					const effectiveDraftDate = resolveEffectiveDraftDate(draft, taskLookup);
-					draft.date = effectiveDraftDate;
-					const scopeKey = buildScopedDraftKey(projectId, moduleType, moduleId);
-					const scope = scopedGroups.get(scopeKey);
+			try {
+				const projectId = normalizeString(draft.project_id, 'project_id');
+				const moduleType = normalizeModuleType(draft.module_type);
+				const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
+				const effectiveDraftDate = resolveEffectiveDraftDate(draft, taskLookup);
+				draft.date = effectiveDraftDate;
+				const scopeKey = buildScopedDraftKey(projectId, moduleType, moduleId);
+				const scope = scopedGroups.get(scopeKey);
 
 				if (!scope) {
 					throw new Error('Could not resolve a project/module scope for the generated timelog draft.');
@@ -842,42 +1064,32 @@ export async function executeGeneratedTimeLogs(
 					continue;
 				}
 
-					const projectDateKey = buildProjectDateKey(projectId, effectiveDraftDate);
-					const draftMinutes = parseHoursToMinutes(draft.hours);
-					const usedMinutes = resolvedProjectDateMinutes.get(projectDateKey) || 0;
-					const remainingMinutes = Math.max(0, DAILY_LOG_LIMIT_MINUTES - usedMinutes);
-					if (draftMinutes > remainingMinutes) {
-						throw new Error(
-							formatDraftCapacityError(draft, projectId, effectiveDraftDate, remainingMinutes),
-						);
-					}
-
-				const createResponse = await callToolWithDelay(
-					'create_time_log',
-					buildCreateTimeLogPayload(draft),
-				);
-				const createdData = parseToolResponse(createResponse);
-				const createdId = extractTimeLogId(createdData);
-				if (!createdId) {
-					throw new Error('Created timelog response did not include an id.');
+				const projectDateKey = buildProjectDateKey(projectId, effectiveDraftDate);
+				const draftMinutes = parseHoursToMinutes(draft.hours);
+				const usedMinutes = resolvedProjectDateMinutes.get(projectDateKey) || 0;
+				const remainingMinutes = Math.max(0, DAILY_LOG_LIMIT_MINUTES - usedMinutes);
+				if (draftMinutes > remainingMinutes) {
+					throw new Error(
+						formatDraftCapacityError(draft, projectId, effectiveDraftDate, remainingMinutes),
+					);
 				}
 
-					setCompletedDraftState(draft, createdId);
-					scopedLogs.push({
-						id: createdId,
-						log_name: draft.log_name,
-					});
-					addProjectDateMinutes(
-						resolvedProjectDateMinutes,
-						projectId,
-						effectiveDraftDate,
-						draftMinutes,
-					);
-					createdCount += 1;
-					processedCount += 1;
-					await writeGeneratedTimeLogsFile(inputFilePath, drafts);
-				} catch (error) {
-					const projectId = typeof draft.project_id === 'string' ? draft.project_id.trim() : '';
+				pendingCreateDrafts.push({
+					draft,
+					projectId,
+					moduleType,
+					moduleId,
+					effectiveDraftDate,
+					scopeKey,
+					scope,
+					draftMinutes,
+				});
+
+				if (targetCount !== 0 && processedCount + pendingCreateDrafts.length >= targetCount) {
+					break;
+				}
+			} catch (error) {
+				const projectId = typeof draft.project_id === 'string' ? draft.project_id.trim() : '';
 				const draftDate = typeof draft.date === 'string' ? draft.date.trim() : '';
 				const zohoRemainingMinutes = getZohoDailyLimitRemainingMinutes(error);
 				if (projectId && draftDate && zohoRemainingMinutes !== undefined) {
@@ -891,6 +1103,104 @@ export async function executeGeneratedTimeLogs(
 				errorCount += 1;
 				processedCount += 1;
 				await writeGeneratedTimeLogsFile(inputFilePath, drafts);
+			}
+		}
+
+		const reconcileDrafts = async (draftBatch: PendingBulkCreateDraft[]): Promise<void> => {
+			const uniqueScopes = new Map<string, ScopedDraftGroup>();
+			for (const pendingDraft of draftBatch) {
+				uniqueScopes.set(pendingDraft.scopeKey, pendingDraft.scope);
+			}
+
+			for (const [scopeKey, scope] of uniqueScopes) {
+				await refreshScopedLogs(
+					scopeKey,
+					scope,
+					scopedLogCache,
+					connection.client,
+					callToolWithDelay,
+				);
+			}
+
+			for (const pendingDraft of draftBatch) {
+				try {
+					const refreshedLogs = scopedLogCache.get(pendingDraft.scopeKey) || [];
+					const matchedLog = findMatchingTimeLog(pendingDraft.draft, refreshedLogs);
+					if (!matchedLog) {
+						throw new Error(
+							`Created timelog could not be reconciled for ${normalizeString(pendingDraft.draft.log_name, 'log_name')}.`,
+						);
+					}
+
+					const createdId = extractTimeLogId(matchedLog);
+					if (!createdId) {
+						throw new Error('Reconciled timelog did not include an id.');
+					}
+
+					setCompletedDraftState(pendingDraft.draft, createdId);
+					addProjectDateMinutes(
+						resolvedProjectDateMinutes,
+						pendingDraft.projectId,
+						pendingDraft.effectiveDraftDate,
+						pendingDraft.draftMinutes,
+					);
+					createdCount += 1;
+				} catch (error) {
+					setErroredDraftState(pendingDraft.draft, error);
+					errorCount += 1;
+				}
+
+				processedCount += 1;
+				await writeGeneratedTimeLogsFile(inputFilePath, drafts);
+			}
+		};
+
+		const createSingleDraft = async (pendingDraft: PendingBulkCreateDraft): Promise<void> => {
+			try {
+				await createBulkTimeLogsWithRetry(
+					[buildBulkCreateTimeLogPayload(pendingDraft.draft)],
+					callWithDelay,
+				);
+				await reconcileDrafts([pendingDraft]);
+			} catch (error) {
+				const zohoRemainingMinutes = getZohoDailyLimitRemainingMinutes(error);
+				if (zohoRemainingMinutes !== undefined) {
+					setErroredDraftState(
+						pendingDraft.draft,
+						new Error(
+							formatDraftCapacityError(
+								pendingDraft.draft,
+								pendingDraft.projectId,
+								pendingDraft.effectiveDraftDate,
+								zohoRemainingMinutes,
+							),
+						),
+					);
+				} else {
+					setErroredDraftState(pendingDraft.draft, error);
+				}
+				errorCount += 1;
+				processedCount += 1;
+				await writeGeneratedTimeLogsFile(inputFilePath, drafts);
+			}
+		};
+
+		for (const draftBatch of chunkItems(pendingCreateDrafts, BULK_CREATE_MAX_LOG_OBJECTS)) {
+			try {
+				await createBulkTimeLogsWithRetry(
+					draftBatch.map((pendingDraft) => buildBulkCreateTimeLogPayload(pendingDraft.draft)),
+					callWithDelay,
+				);
+				await reconcileDrafts(draftBatch);
+			} catch (error) {
+				if (draftBatch.length === 1) {
+					await createSingleDraft(draftBatch[0]);
+					continue;
+				}
+
+				for (const pendingDraft of draftBatch) {
+					await createSingleDraft(pendingDraft);
+				}
 			}
 		}
 	} finally {

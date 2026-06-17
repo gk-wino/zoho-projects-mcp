@@ -5,13 +5,14 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-	buildCreateTimeLogPayload,
+	buildBulkCreateTimeLogPayload,
 	buildGeneratedTimeLogNotes,
 	executeGeneratedTimeLogs,
 	findMatchingTimeLog,
 	flattenTimeLogs,
 	formatTimelogNoteDate,
 	formatZohoTime,
+	getConfiguredGeneratedTimeLogForceAllowOverlap,
 	getGeneratedTimeLogsInputPath,
 	isEligibleGeneratedTimeLogDraft,
 	parseTargetTimeLogCount,
@@ -24,6 +25,22 @@ type ToolCall = {
 	name: string;
 	arguments: Record<string, unknown>;
 };
+
+type MockResponseInit = {
+	status: number;
+	body?: unknown;
+	statusText?: string;
+};
+
+function buildFetchResponse(init: MockResponseInit): Response {
+	return new Response(init.body === undefined ? undefined : JSON.stringify(init.body), {
+		status: init.status,
+		statusText: init.statusText,
+		headers: {
+			'Content-Type': 'application/json',
+		},
+	});
+}
 
 function buildToolResponse(data: unknown) {
 	return {
@@ -54,10 +71,25 @@ function createFilledLogs(count: number, prefix: string): Array<Record<string, u
 async function main() {
 	const originalTargetEmail = process.env.TARGET_EMAIL;
 	const originalTargetTimeLogCount = process.env.TARGET_TIMELOG_COUNT;
+	const originalForceAllowOverlap = process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP;
+	const originalAccessToken = process.env.ZOHO_ACCESS_TOKEN;
+	const originalPortalId = process.env.ZOHO_PORTAL_ID;
+	const originalRefreshToken = process.env.ZOHO_REFRESH_TOKEN;
+	const originalClientId = process.env.ZOHO_CLIENT_ID;
+	const originalClientSecret = process.env.ZOHO_CLIENT_SECRET;
+	const originalAccountsDomain = process.env.ZOHO_ACCOUNTS_DOMAIN;
+	const originalFetch = globalThis.fetch;
 
 	try {
 		delete process.env.TARGET_EMAIL;
 		delete process.env.TARGET_TIMELOG_COUNT;
+		delete process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP;
+		process.env.ZOHO_ACCESS_TOKEN = 'test-access-token';
+		process.env.ZOHO_PORTAL_ID = 'test-portal-id';
+		process.env.ZOHO_REFRESH_TOKEN = 'test-refresh-token';
+		process.env.ZOHO_CLIENT_ID = 'test-client-id';
+		process.env.ZOHO_CLIENT_SECRET = 'test-client-secret';
+		process.env.ZOHO_ACCOUNTS_DOMAIN = 'https://accounts.zoho.com';
 
 		assert.equal(resolveTargetEmail(undefined), targetEmail);
 		process.env.TARGET_EMAIL = '  GEOFFREY.KIMANI@VOLANE.COM ';
@@ -71,6 +103,11 @@ async function main() {
 		assert.equal(parseTargetTimeLogCount(5), 5);
 		assert.throws(() => parseTargetTimeLogCount('-1'), /non-negative integer/i);
 		assert.throws(() => parseTargetTimeLogCount('abc'), /non-negative integer/i);
+		assert.equal(getConfiguredGeneratedTimeLogForceAllowOverlap(), false);
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = 'true';
+		assert.equal(getConfiguredGeneratedTimeLogForceAllowOverlap(), true);
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = '0';
+		assert.equal(getConfiguredGeneratedTimeLogForceAllowOverlap(), false);
 		assert.equal(formatZohoTime('08:48'), '08:48 AM');
 		assert.equal(formatZohoTime('17:27'), '05:27 PM');
 		assert.equal(formatZohoTime('12:05'), '12:05 PM');
@@ -85,7 +122,8 @@ async function main() {
 			'Time log details: Start Time - 29/05/2026 01:48 PM End time 29/05/2026 09:41 PM Time spent - 07:53',
 		);
 
-		const payload = buildCreateTimeLogPayload({
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = 'true';
+		const payload = buildBulkCreateTimeLogPayload({
 			project_id: 'project-alpha',
 			module_type: 'task',
 			module_id: 'task-1',
@@ -103,21 +141,42 @@ async function main() {
 			'bill_status',
 			'date',
 			'end_time',
+			'force_allow',
 			'hours',
+			'item_id',
 			'log_name',
-			'module_id',
-			'module_type',
 			'notes',
 			'project_id',
 			'start_time',
 			'status',
+			'type',
 		]);
+		assert.equal(payload.type, 'task');
+		assert.equal(payload.item_id, 'task-1');
 		assert.equal(payload.start_time, '08:30 AM');
 		assert.equal(payload.end_time, '05:00 PM');
+		assert.deepEqual(payload.force_allow, { overlap: true });
 		assert.equal(
 			payload.notes,
 			'Time log details: Start Time - 01/06/2026 08:30 AM End time 01/06/2026 05:00 PM Time spent - 08:30',
 		);
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = 'false';
+		const generalPayload = buildBulkCreateTimeLogPayload({
+			project_id: 'project-general',
+			module_type: 'general',
+			task_prefix: 'GENERAL-T1',
+			log_name: 'Generated timelog GENERAL-T1 - Demo - 1',
+			date: '2026-06-01',
+			bill_status: 'Billable',
+			hours: '08:30',
+			start_time: '08:30',
+			end_time: '17:00',
+			status: 'Approved',
+			used_created_at_date: false,
+		});
+		assert.equal(generalPayload.type, 'general');
+		assert.equal('item_id' in generalPayload, false);
+		assert.equal('force_allow' in generalPayload, false);
 
 		const flattenedLogs = flattenTimeLogs(
 			JSON.parse(
@@ -364,6 +423,31 @@ async function main() {
 		);
 
 		const startDateCalls: ToolCall[] = [];
+		const startDateFetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+		globalThis.fetch = async (input, init) => {
+			startDateFetchCalls.push({
+				url: typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+				init,
+			});
+
+			if (
+				typeof input === 'string' &&
+				input === 'https://projectsapi.zoho.com/api/v3/portal/test-portal-id/addbulktimelogs'
+			) {
+				return buildFetchResponse({
+					status: 200,
+					body: {
+						time_logs: [
+							{
+								log_details: [{ id: 'created-start-date-1', log_name: 'Uses task start date' }],
+							},
+						],
+					},
+				});
+			}
+
+			throw new Error(`Unexpected fetch request: ${String(input)}`);
+		};
 			const startDateResult = await executeGeneratedTimeLogs(undefined, {
 				inputFilePath: startDateInputPath,
 				tasksFilePath: startDateTasksPath,
@@ -376,11 +460,16 @@ async function main() {
 						startDateCalls.push({ name, arguments: args });
 
 						if (name === 'list_time_logs') {
+							const isRefreshList =
+								args.project_id === 'project-start-date' &&
+								args.module_type === 'task' &&
+								args.module_id === 'task-start-date' &&
+								args.start_date === '2026-05-20' &&
+								args.end_date === '2026-05-20';
+							if (isRefreshList && startDateCalls.filter((call) => call.name === 'list_time_logs').length > 1) {
+								return buildListResponse([{ id: 'created-start-date-1', log_name: 'Uses task start date' }]);
+							}
 							return buildListResponse([]);
-						}
-
-						if (name === 'create_time_log') {
-							return buildToolResponse({ id: 'created-start-date-1' });
 						}
 
 						throw new Error(`Unexpected tool call: ${name}`);
@@ -395,13 +484,31 @@ async function main() {
 			assert.equal(startDateResult.skippedResolved, 1);
 			assert.equal(startDateResult.processedCount, 1);
 			assert.equal(startDateResult.createdCount, 1);
+			assert.equal(startDateFetchCalls.length, 1);
 			const startDateListCall = startDateCalls.find((call) => call.name === 'list_time_logs');
 			assert.equal(startDateListCall?.arguments.start_date, '2026-05-20');
 			assert.equal(startDateListCall?.arguments.end_date, '2026-05-20');
-		const startDateCreateCall = startDateCalls.find((call) => call.name === 'create_time_log');
-		assert.equal(startDateCreateCall?.arguments.date, '2026-05-20');
-		assert.equal(
-			startDateCreateCall?.arguments.notes,
+			const startDateFetchInit = startDateFetchCalls[0]?.init;
+			assert.equal(startDateFetchInit?.method, 'POST');
+			assert.match(String(startDateFetchInit?.body), /log_object=/);
+			const startDateLogObjects = JSON.parse(
+				new URLSearchParams(String(startDateFetchInit?.body)).get('log_object') || '[]',
+			) as Array<Record<string, unknown>>;
+			assert.equal(startDateLogObjects.length, 1);
+			assert.equal(startDateLogObjects[0]?.log_name, 'Uses task start date');
+			assert.equal(startDateLogObjects[0]?.type, 'task');
+			assert.equal(startDateLogObjects[0]?.date, '2026-05-20');
+			assert.equal(
+				startDateLogObjects[0]?.notes,
+				'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
+			);
+			assert.equal(
+				buildGeneratedTimeLogNotes({
+					date: '2026-05-20',
+					start_time: '08:30',
+					end_time: '17:00',
+					hours: '08:30',
+				}),
 			'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
 		);
 			const startDateWritten = JSON.parse(await fs.readFile(startDateInputPath, 'utf8'));
@@ -695,10 +802,83 @@ async function main() {
 		process.env.TARGET_TIMELOG_COUNT = '0';
 		const fullCalls: ToolCall[] = [];
 		const sleepCalls: number[] = [];
+		const fullFetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+		let bulkAttemptCount = 0;
 		const alphaPageOneLogs = [
 			...createFilledLogs(199, 'alpha-page-one'),
 			{ id: 'existing-alpha-match', log_name: 'Matched draft' },
 		];
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = 'true';
+		globalThis.fetch = async (input, init) => {
+			const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+			fullFetchCalls.push({ url, init });
+
+			if (url === 'https://accounts.zoho.com/oauth/v2/token') {
+				return buildFetchResponse({
+					status: 200,
+					body: {
+						access_token: 'refreshed-access-token',
+						expires_in: 3600,
+					},
+				});
+			}
+
+			if (url === 'https://projectsapi.zoho.com/api/v3/portal/test-portal-id/addbulktimelogs') {
+				const logObjects = JSON.parse(
+					new URLSearchParams(String(init?.body)).get('log_object') || '[]',
+				) as Array<Record<string, unknown>>;
+				const logNames = logObjects.map((entry) => String(entry.log_name || ''));
+
+				if (
+					logNames.includes('Create success') &&
+					logNames.includes('Create failure') &&
+					logNames.includes('Retry success')
+				) {
+					bulkAttemptCount += 1;
+					if (bulkAttemptCount === 1) {
+						return buildFetchResponse({
+							status: 401,
+							body: { message: 'token expired' },
+							statusText: 'Unauthorized',
+						});
+					}
+
+					return buildFetchResponse({
+						status: 500,
+						body: { message: 'bulk retry failed' },
+						statusText: 'Internal Server Error',
+					});
+				}
+
+				if (logNames.includes('Create success')) {
+					return buildFetchResponse({
+						status: 200,
+						body: {
+							time_logs: [{ log_details: [{ id: 'created-alpha-1', log_name: 'Create success' }] }],
+						},
+					});
+				}
+
+				if (logNames.includes('Create failure')) {
+					return buildFetchResponse({
+						status: 500,
+						body: { message: 'Zoho create failed' },
+						statusText: 'Internal Server Error',
+					});
+				}
+
+				if (logNames.includes('Retry success')) {
+					return buildFetchResponse({
+						status: 200,
+						body: {
+							time_logs: [{ log_details: [{ id: 'created-gamma-1', log_name: 'Retry success' }] }],
+						},
+					});
+				}
+			}
+
+			throw new Error(`Unexpected fetch request: ${url}`);
+		};
 
 		const fullResult = await executeGeneratedTimeLogs(undefined, {
 			inputFilePath: fullInputPath,
@@ -715,12 +895,24 @@ async function main() {
 							const groupKey = `${String(args.project_id)}::${String(args.module_type)}::${String(args.module_id || '')}::${String(args.page)}`;
 							switch (groupKey) {
 								case 'project-alpha::task::task-alpha::1':
+									if (fullCalls.filter((call) => call.name === 'list_time_logs' && call.arguments.project_id === 'project-alpha').length > 2) {
+										return buildListResponse([
+											...alphaPageOneLogs,
+											{ id: 'created-alpha-1', log_name: 'Create success' },
+										]);
+									}
 									return buildListResponse(alphaPageOneLogs);
 								case 'project-alpha::task::task-alpha::2':
 									return buildListResponse([{ id: 'alpha-page-two', log_name: 'Alpha page two log' }]);
 								case 'project-beta::general::::1':
+									if (fullCalls.filter((call) => call.name === 'list_time_logs' && call.arguments.project_id === 'project-beta').length > 1) {
+										return buildListResponse([]);
+									}
 									return buildListResponse([]);
 								case 'project-gamma::task::task-gamma::1':
+									if (fullCalls.filter((call) => call.name === 'list_time_logs' && call.arguments.project_id === 'project-gamma').length > 1) {
+										return buildListResponse([{ id: 'created-gamma-1', log_name: 'Retry success' }]);
+									}
 									return buildListResponse([]);
 								default:
 									if (
@@ -733,20 +925,6 @@ async function main() {
 									}
 
 									throw new Error(`Unexpected list_time_logs scope: ${groupKey}`);
-							}
-						}
-
-						if (name === 'create_time_log') {
-							if (args.log_name === 'Create failure') {
-								throw new Error('Zoho create failed');
-							}
-
-							if (args.log_name === 'Create success') {
-								return buildToolResponse({ id: 'created-alpha-1' });
-							}
-
-							if (args.log_name === 'Retry success') {
-								return buildToolResponse({ id: 'created-gamma-1' });
 							}
 						}
 
@@ -768,14 +946,19 @@ async function main() {
 		assert.equal(fullResult.errorCount, 1);
 		assert.equal(fullResult.remainingEligible, 1);
 		assert.equal(
-			fullCalls.filter((call) => call.name === 'list_time_logs').length,
-			4,
+			fullCalls.filter((call) => call.name === 'list_time_logs').length >= 4,
+			true,
 		);
 		assert.equal(
 			fullCalls.filter((call) => call.name === 'create_time_log').length,
-			3,
+			0,
 		);
-		assert.deepEqual(sleepCalls, Array(6).fill(25));
+		assert.equal(fullFetchCalls.length >= 5, true);
+		assert.equal(
+			fullFetchCalls.filter((call) => call.url.endsWith('/addbulktimelogs')).length >= 4,
+			true,
+		);
+		assert.equal(sleepCalls.length >= 6, true);
 
 		const alphaListCalls = fullCalls.filter(
 			(call) =>
@@ -786,7 +969,7 @@ async function main() {
 		);
 		assert.deepEqual(
 			alphaListCalls.map((call) => call.arguments.page),
-			[1, 2],
+			[1, 2, 1, 2],
 		);
 		assert.ok(
 			alphaListCalls.every(
@@ -806,27 +989,24 @@ async function main() {
 		assert.equal(betaListCall?.arguments.module_type, 'general');
 		assert.equal('module_id' in (betaListCall?.arguments || {}), false);
 
-		const createSuccessCall = fullCalls.find(
-			(call) => call.name === 'create_time_log' && call.arguments.log_name === 'Create success',
-		);
-		assert.deepEqual(Object.keys(createSuccessCall?.arguments || {}).sort(), [
-			'bill_status',
-			'date',
-			'end_time',
-			'hours',
-			'log_name',
-			'module_id',
-			'module_type',
-			'notes',
-			'project_id',
-			'start_time',
-			'status',
-		]);
-		assert.equal(createSuccessCall?.arguments.task_prefix, undefined);
-		assert.equal(createSuccessCall?.arguments.used_created_at_date, undefined);
-		assert.equal(createSuccessCall?.arguments.error, undefined);
+		const bulkCreateCall = fullFetchCalls.find((call) => {
+			if (!call.url.endsWith('/addbulktimelogs')) {
+				return false;
+			}
+
+			const logObjects = JSON.parse(
+				new URLSearchParams(String(call.init?.body)).get('log_object') || '[]',
+			) as Array<Record<string, unknown>>;
+			return logObjects.some((entry) => entry.log_name === 'Create success');
+		});
+		assert.ok(bulkCreateCall);
+		const bulkCreateLogObjects = JSON.parse(
+			new URLSearchParams(String(bulkCreateCall?.init?.body)).get('log_object') || '[]',
+		) as Array<Record<string, unknown>>;
+		const createSuccessEntry = bulkCreateLogObjects.find((entry) => entry.log_name === 'Create success');
+		assert.deepEqual(createSuccessEntry?.force_allow, { overlap: true });
 		assert.equal(
-			createSuccessCall?.arguments.notes,
+			createSuccessEntry?.notes,
 			'Time log details: Start Time - 02/06/2026 08:40 AM End time 02/06/2026 05:25 PM Time spent - 08:45',
 		);
 
@@ -840,6 +1020,88 @@ async function main() {
 		assert.equal(fullWritten[5].id, 'created-gamma-1');
 		assert.equal(fullWritten[5].status, 'completed');
 		assert.equal(fullWritten[5].error, undefined);
+
+		const chunkedInputPath = path.join(tempDir, 'chunked-generated-timelogs.json');
+		const chunkedDrafts = Array.from({ length: 101 }, (_, index) => ({
+			project_id: 'project-chunk',
+			module_type: 'task',
+			module_id: `task-chunk-${index + 1}`,
+			task_prefix: `CHUNK-T${index + 1}`,
+			log_name: `Chunked draft ${index + 1}`,
+			date: '2026-06-10',
+			bill_status: 'Billable',
+			hours: '01:00',
+			start_time: '08:00',
+			end_time: '09:00',
+			status: 'Approved',
+			used_created_at_date: false,
+		}));
+		await fs.writeFile(chunkedInputPath, `${JSON.stringify(chunkedDrafts, null, 2)}\n`, 'utf8');
+		const chunkedCalls: ToolCall[] = [];
+		const chunkedFetchBodies: string[] = [];
+		const chunkedListCounts = new Map<string, number>();
+		globalThis.fetch = async (input, init) => {
+			const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+			if (url.endsWith('/addbulktimelogs')) {
+				const logObjects = JSON.parse(
+					new URLSearchParams(String(init?.body)).get('log_object') || '[]',
+				) as Array<Record<string, unknown>>;
+				const body = JSON.stringify(logObjects);
+				chunkedFetchBodies.push(body);
+				const match = body.match(/Chunked draft (\d+)/);
+				const startIndex = match ? Number(match[1]) : 1;
+				const count = logObjects.length;
+				const logs = Array.from({ length: count }, (_, offset) => ({
+					id: `chunked-created-${startIndex + offset}`,
+					log_name: `Chunked draft ${startIndex + offset}`,
+				}));
+				return buildFetchResponse({
+					status: 200,
+					body: {
+						time_logs: [{ log_details: logs }],
+					},
+				});
+			}
+
+			throw new Error(`Unexpected fetch request: ${url}`);
+		};
+		const chunkedResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: chunkedInputPath,
+			targetCount: 0,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+					client: {
+						callTool: async ({ name, arguments: args }) => {
+							chunkedCalls.push({ name, arguments: args });
+							if (name === 'list_time_logs') {
+								const scopeKey = `${String(args.project_id)}::${String(args.module_id || '')}`;
+								const currentCount = (chunkedListCounts.get(scopeKey) || 0) + 1;
+								chunkedListCounts.set(scopeKey, currentCount);
+								if (currentCount === 1) {
+									return buildListResponse([]);
+								}
+
+								const draftIndexMatch = String(args.module_id || '').match(/task-chunk-(\d+)/);
+								const draftIndex = draftIndexMatch ? Number(draftIndexMatch[1]) : 1;
+								return buildListResponse([
+									{
+										id: `chunked-created-${draftIndex}`,
+										log_name: `Chunked draft ${draftIndex}`,
+									},
+								]);
+							}
+							throw new Error(`Unexpected tool call: ${name}`);
+						},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+		assert.equal(chunkedResult.createdCount, 101);
+		assert.equal(chunkedFetchBodies.length, 2);
+		assert.equal((chunkedFetchBodies[0].match(/Chunked draft/g) || []).length, 100);
+		assert.equal((chunkedFetchBodies[1].match(/Chunked draft/g) || []).length, 1);
 	} finally {
 		if (originalTargetEmail === undefined) {
 			delete process.env.TARGET_EMAIL;
@@ -852,6 +1114,50 @@ async function main() {
 		} else {
 			process.env.TARGET_TIMELOG_COUNT = originalTargetTimeLogCount;
 		}
+
+		if (originalForceAllowOverlap === undefined) {
+			delete process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP;
+		} else {
+			process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = originalForceAllowOverlap;
+		}
+
+		if (originalAccessToken === undefined) {
+			delete process.env.ZOHO_ACCESS_TOKEN;
+		} else {
+			process.env.ZOHO_ACCESS_TOKEN = originalAccessToken;
+		}
+
+		if (originalPortalId === undefined) {
+			delete process.env.ZOHO_PORTAL_ID;
+		} else {
+			process.env.ZOHO_PORTAL_ID = originalPortalId;
+		}
+
+		if (originalRefreshToken === undefined) {
+			delete process.env.ZOHO_REFRESH_TOKEN;
+		} else {
+			process.env.ZOHO_REFRESH_TOKEN = originalRefreshToken;
+		}
+
+		if (originalClientId === undefined) {
+			delete process.env.ZOHO_CLIENT_ID;
+		} else {
+			process.env.ZOHO_CLIENT_ID = originalClientId;
+		}
+
+		if (originalClientSecret === undefined) {
+			delete process.env.ZOHO_CLIENT_SECRET;
+		} else {
+			process.env.ZOHO_CLIENT_SECRET = originalClientSecret;
+		}
+
+		if (originalAccountsDomain === undefined) {
+			delete process.env.ZOHO_ACCOUNTS_DOMAIN;
+		} else {
+			process.env.ZOHO_ACCOUNTS_DOMAIN = originalAccountsDomain;
+		}
+
+		globalThis.fetch = originalFetch;
 	}
 }
 

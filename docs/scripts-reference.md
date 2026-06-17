@@ -158,7 +158,7 @@ Outputs:
 
 ### `scripts/create-generated-timelogs.ts`
 
-Reads the generated timelog draft JSON, skips drafts that are already completed or already have an ID, checks for duplicate time logs within the same project and module, and creates missing logs through the MCP `create_time_log` tool.
+Reads the generated timelog draft JSON, skips drafts that are already completed or already have an ID, checks for duplicate time logs within the same project and module, and creates missing logs through Zoho Projects bulk timelog requests in batches of up to 100 entries.
 
 Arguments:
 
@@ -168,6 +168,7 @@ Key env vars:
 
 - `TARGET_EMAIL`
 - `TARGET_TIMELOG_COUNT`
+- `GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP`
 - `ZOHO_ACCESS_TOKEN`
 - `ZOHO_PORTAL_ID`
 
