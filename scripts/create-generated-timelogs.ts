@@ -9,12 +9,14 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
 	type GeneratedTimeLogDraft,
+	type Task,
 	getGeneratedTimeLogsDataPath,
 } from './filter-tasks-by-email-work.ts';
+import { getTasksByEmailDataPath } from './list-tasks-by-email.ts';
 
-type ExecutableGeneratedTimeLogDraft = GeneratedTimeLogDraft & {
+type ExecutableGeneratedTimeLogDraft = Omit<GeneratedTimeLogDraft, 'status'> & {
 	id?: number | string;
-	status?: 'completed' | 'error';
+	status?: GeneratedTimeLogDraft['status'] | 'completed' | 'error';
 	error?: string;
 };
 
@@ -51,6 +53,7 @@ type McpClientConnection = {
 
 type ExecuteGeneratedTimeLogsOptions = {
 	inputFilePath?: string;
+	tasksFilePath?: string;
 	targetCount?: number;
 	requestDelayMs?: number;
 	sleepFn?: (ms: number) => Promise<void>;
@@ -77,6 +80,7 @@ const DEFAULT_TARGET_EMAIL = 'geoffrey.kimani@volane.com';
 const DEFAULT_TARGET_TIMELOG_COUNT = 1;
 const DEFAULT_REQUEST_DELAY_MS = 1000;
 const LIST_TIME_LOGS_PER_PAGE = 200;
+const DAILY_LOG_LIMIT_MINUTES = 24 * 60;
 const REQUIRED_ENV_VARS = ['ZOHO_ACCESS_TOKEN', 'ZOHO_PORTAL_ID'];
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,6 +167,19 @@ export function getGeneratedTimeLogsInputPath(email: string, inputFilePath?: str
 	return getGeneratedTimeLogsDataPath(requireEmail(email));
 }
 
+function getTasksInputPath(email: string, tasksFilePath?: string): string {
+	if (tasksFilePath !== undefined) {
+		const trimmedPath = tasksFilePath.trim();
+		if (!trimmedPath) {
+			throw new Error('A tasks file path is required when provided.');
+		}
+
+		return path.resolve(trimmedPath);
+	}
+
+	return getTasksByEmailDataPath(requireEmail(email));
+}
+
 export function hasGeneratedTimeLogId(draft: ExecutableGeneratedTimeLogDraft): boolean {
 	if (draft.id === undefined || draft.id === null) {
 		return false;
@@ -183,6 +200,28 @@ export function isEligibleGeneratedTimeLogDraft(
 	return !isCompletedGeneratedTimeLogDraft(draft) && !hasGeneratedTimeLogId(draft);
 }
 
+function getEligibleDraftsInProcessingOrder(
+	drafts: ExecutableGeneratedTimeLogDraft[],
+): ExecutableGeneratedTimeLogDraft[] {
+	const freshDrafts: ExecutableGeneratedTimeLogDraft[] = [];
+	const retryDrafts: ExecutableGeneratedTimeLogDraft[] = [];
+
+	for (const draft of drafts) {
+		if (!isEligibleGeneratedTimeLogDraft(draft)) {
+			continue;
+		}
+
+		if (draft.status === 'error') {
+			retryDrafts.push(draft);
+			continue;
+		}
+
+		freshDrafts.push(draft);
+	}
+
+	return [...freshDrafts, ...retryDrafts];
+}
+
 export async function readGeneratedTimeLogsFile(
 	inputFilePath: string,
 ): Promise<ExecutableGeneratedTimeLogDraft[]> {
@@ -193,6 +232,19 @@ export async function readGeneratedTimeLogsFile(
 	}
 
 	return data as ExecutableGeneratedTimeLogDraft[];
+}
+
+async function readTasksFile(tasksFilePath: string): Promise<Task[]> {
+	try {
+		const data = JSON.parse(await fsp.readFile(tasksFilePath, 'utf8')) as unknown;
+		return Array.isArray(data) ? (data as Task[]) : [];
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+			return [];
+		}
+
+		throw error;
+	}
 }
 
 export async function writeGeneratedTimeLogsFile(
@@ -223,6 +275,20 @@ function normalizeModuleType(value: unknown): 'task' | 'issue' | 'general' {
 	}
 
 	return moduleType;
+}
+
+function formatTaskDateValue(value: unknown): string | undefined {
+	if (typeof value !== 'string') {
+		return undefined;
+	}
+
+	const trimmedValue = value.trim();
+	if (!trimmedValue) {
+		return undefined;
+	}
+
+	const isoDateMatch = trimmedValue.match(/^\d{4}-\d{2}-\d{2}/);
+	return isoDateMatch ? isoDateMatch[0] : undefined;
 }
 
 export function formatZohoTime(value: unknown): string {
@@ -313,6 +379,133 @@ export function flattenTimeLogs(data: unknown): TimeLogListEntry[] {
 	);
 }
 
+function parseHoursToMinutes(value: unknown): number {
+	if (typeof value === 'number') {
+		return Number.isFinite(value) ? Math.max(0, Math.round(value * 60)) : 0;
+	}
+
+	if (typeof value !== 'string') {
+		return 0;
+	}
+
+	const normalizedValue = value.trim();
+	if (!normalizedValue) {
+		return 0;
+	}
+
+	const hoursMatch = normalizedValue.match(/^(\d+):(\d{2})$/);
+	if (hoursMatch) {
+		return Number(hoursMatch[1]) * 60 + Number(hoursMatch[2]);
+	}
+
+	const numericValue = Number(normalizedValue);
+	return Number.isFinite(numericValue) ? Math.max(0, Math.round(numericValue * 60)) : 0;
+}
+
+function formatMinutesAsHours(totalMinutes: number): string {
+	const safeMinutes = Math.max(0, Math.round(totalMinutes));
+	const hours = Math.floor(safeMinutes / 60);
+	const minutes = safeMinutes % 60;
+	return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function buildProjectDateKey(projectId: string, date: string): string {
+	return `${projectId}::${date}`;
+}
+
+function addProjectDateMinutes(
+	projectDateMinutes: Map<string, number>,
+	projectId: string,
+	date: string,
+	minutes: number,
+): void {
+	const projectDateKey = buildProjectDateKey(projectId, date);
+	projectDateMinutes.set(projectDateKey, (projectDateMinutes.get(projectDateKey) || 0) + minutes);
+}
+
+function buildResolvedProjectDateMinutes(
+	drafts: ExecutableGeneratedTimeLogDraft[],
+): Map<string, number> {
+	const projectDateMinutes = new Map<string, number>();
+
+	for (const draft of drafts) {
+		if (!isCompletedGeneratedTimeLogDraft(draft)) {
+			continue;
+		}
+
+		try {
+			const projectId = normalizeString(draft.project_id, 'project_id');
+			const date = normalizeString(draft.date, 'date');
+			const minutes = parseHoursToMinutes(draft.hours);
+			addProjectDateMinutes(projectDateMinutes, projectId, date, minutes);
+		} catch {
+			// Ignore malformed resolved drafts and allow main execution to handle them if retried later.
+		}
+	}
+
+	return projectDateMinutes;
+}
+
+function getZohoDailyLimitRemainingMinutes(error: unknown): number | undefined {
+	const message = error instanceof Error ? error.message : String(error);
+	const match = message.match(/You are left with\s+(\d{1,2}:\d{2})\s+hour\(s\)\s+to log/i);
+	if (!match) {
+		return undefined;
+	}
+
+	return parseHoursToMinutes(match[1]);
+}
+
+function formatDraftCapacityError(
+	draft: ExecutableGeneratedTimeLogDraft,
+	projectId: string,
+	date: string,
+	remainingMinutes: number,
+): string {
+	const draftMinutes = parseHoursToMinutes(draft.hours);
+	return `Insufficient remaining daily hours for ${date} in project ${projectId}: draft needs ${formatMinutesAsHours(draftMinutes)}, only ${formatMinutesAsHours(remainingMinutes)} remaining before Zoho's 24:00 limit.`;
+}
+
+function buildTaskLookup(tasks: Task[]): Map<string, Task> {
+	const lookup = new Map<string, Task>();
+
+	for (const task of tasks) {
+		const taskId = task.id === undefined || task.id === null ? '' : String(task.id).trim();
+		const projectId =
+			task.project?.id === undefined || task.project?.id === null
+				? ''
+				: String(task.project.id).trim();
+		if (!taskId || !projectId) {
+			continue;
+		}
+
+		lookup.set(`${projectId}::${taskId}`, task);
+	}
+
+	return lookup;
+}
+
+function resolveEffectiveDraftDate(
+	draft: ExecutableGeneratedTimeLogDraft,
+	taskLookup: Map<string, Task>,
+): string {
+	const projectId = normalizeString(draft.project_id, 'project_id');
+	const fallbackDate = normalizeString(draft.date, 'date');
+
+	if (draft.module_type !== 'task') {
+		return fallbackDate;
+	}
+
+	const moduleId = maybeNormalizeModuleId('task', draft.module_id);
+	if (!moduleId) {
+		return fallbackDate;
+	}
+
+	const task = taskLookup.get(`${projectId}::${moduleId}`);
+	const startDate = formatTaskDateValue(task?.start_date);
+	return startDate || fallbackDate;
+}
+
 function buildScopedDraftKey(
 	projectId: string,
 	moduleType: 'task' | 'issue' | 'general',
@@ -323,6 +516,7 @@ function buildScopedDraftKey(
 
 function buildScopedDraftGroups(
 	drafts: ExecutableGeneratedTimeLogDraft[],
+	resolveDraftDate: (draft: ExecutableGeneratedTimeLogDraft) => string,
 ): Map<string, ScopedDraftGroup> {
 	const groups = new Map<string, ScopedDraftGroup>();
 
@@ -334,7 +528,7 @@ function buildScopedDraftGroups(
 		const projectId = normalizeString(draft.project_id, 'project_id');
 		const moduleType = normalizeModuleType(draft.module_type);
 		const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
-		const date = normalizeString(draft.date, 'date');
+		const date = resolveDraftDate(draft);
 		const key = buildScopedDraftKey(projectId, moduleType, moduleId);
 		const existingGroup = groups.get(key);
 
@@ -532,14 +726,17 @@ export async function executeGeneratedTimeLogs(
 ): Promise<ExecuteGeneratedTimeLogsResult> {
 	const email = resolveTargetEmail(explicitEmail);
 	const inputFilePath = getGeneratedTimeLogsInputPath(email, options.inputFilePath);
+	const tasksFilePath = getTasksInputPath(email, options.tasksFilePath);
 	const targetCount = parseTargetTimeLogCount(
 		options.targetCount ?? getConfiguredTargetTimeLogCount(),
 	);
 	const requestDelayMs = options.requestDelayMs ?? DEFAULT_REQUEST_DELAY_MS;
 	const sleepFn = options.sleepFn ?? (async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 	const drafts = await readGeneratedTimeLogsFile(inputFilePath);
-	const scopedGroups = buildScopedDraftGroups(drafts);
+	const taskLookup = buildTaskLookup(await readTasksFile(tasksFilePath));
+	const scopedGroups = buildScopedDraftGroups(drafts, (draft) => resolveEffectiveDraftDate(draft, taskLookup));
 	const scopedLogCache = new Map<string, TimeLogListEntry[]>();
+	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts);
 	const totalDrafts = drafts.length;
 	const eligibleBeforeRun = drafts.filter(isEligibleGeneratedTimeLogDraft).length;
 	const skippedResolved = totalDrafts - eligibleBeforeRun;
@@ -570,21 +767,19 @@ export async function executeGeneratedTimeLogs(
 	};
 
 	try {
-		for (const draft of drafts) {
-			if (!isEligibleGeneratedTimeLogDraft(draft)) {
-				continue;
-			}
-
+		for (const draft of getEligibleDraftsInProcessingOrder(drafts)) {
 			if (targetCount !== 0 && processedCount >= targetCount) {
 				break;
 			}
 
-			try {
-				const projectId = normalizeString(draft.project_id, 'project_id');
-				const moduleType = normalizeModuleType(draft.module_type);
-				const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
-				const scopeKey = buildScopedDraftKey(projectId, moduleType, moduleId);
-				const scope = scopedGroups.get(scopeKey);
+				try {
+					const projectId = normalizeString(draft.project_id, 'project_id');
+					const moduleType = normalizeModuleType(draft.module_type);
+					const moduleId = maybeNormalizeModuleId(moduleType, draft.module_id);
+					const effectiveDraftDate = resolveEffectiveDraftDate(draft, taskLookup);
+					draft.date = effectiveDraftDate;
+					const scopeKey = buildScopedDraftKey(projectId, moduleType, moduleId);
+					const scope = scopedGroups.get(scopeKey);
 
 				if (!scope) {
 					throw new Error('Could not resolve a project/module scope for the generated timelog draft.');
@@ -603,12 +798,28 @@ export async function executeGeneratedTimeLogs(
 						throw new Error('Matched existing timelog did not include an id.');
 					}
 
-					setCompletedDraftState(draft, matchedId);
-					matchedExistingCount += 1;
+						setCompletedDraftState(draft, matchedId);
+						addProjectDateMinutes(
+							resolvedProjectDateMinutes,
+							projectId,
+							effectiveDraftDate,
+							parseHoursToMinutes(draft.hours),
+						);
+						matchedExistingCount += 1;
 					processedCount += 1;
 					await writeGeneratedTimeLogsFile(inputFilePath, drafts);
 					continue;
 				}
+
+					const projectDateKey = buildProjectDateKey(projectId, effectiveDraftDate);
+					const draftMinutes = parseHoursToMinutes(draft.hours);
+					const usedMinutes = resolvedProjectDateMinutes.get(projectDateKey) || 0;
+					const remainingMinutes = Math.max(0, DAILY_LOG_LIMIT_MINUTES - usedMinutes);
+					if (draftMinutes > remainingMinutes) {
+						throw new Error(
+							formatDraftCapacityError(draft, projectId, effectiveDraftDate, remainingMinutes),
+						);
+					}
 
 				const createResponse = await callToolWithDelay(
 					'create_time_log',
@@ -620,16 +831,32 @@ export async function executeGeneratedTimeLogs(
 					throw new Error('Created timelog response did not include an id.');
 				}
 
-				setCompletedDraftState(draft, createdId);
-				scopedLogs.push({
-					id: createdId,
-					log_name: draft.log_name,
-				});
-				createdCount += 1;
-				processedCount += 1;
-				await writeGeneratedTimeLogsFile(inputFilePath, drafts);
-			} catch (error) {
-				setErroredDraftState(draft, error);
+					setCompletedDraftState(draft, createdId);
+					scopedLogs.push({
+						id: createdId,
+						log_name: draft.log_name,
+					});
+					addProjectDateMinutes(
+						resolvedProjectDateMinutes,
+						projectId,
+						effectiveDraftDate,
+						draftMinutes,
+					);
+					createdCount += 1;
+					processedCount += 1;
+					await writeGeneratedTimeLogsFile(inputFilePath, drafts);
+				} catch (error) {
+					const projectId = typeof draft.project_id === 'string' ? draft.project_id.trim() : '';
+				const draftDate = typeof draft.date === 'string' ? draft.date.trim() : '';
+				const zohoRemainingMinutes = getZohoDailyLimitRemainingMinutes(error);
+				if (projectId && draftDate && zohoRemainingMinutes !== undefined) {
+					setErroredDraftState(
+						draft,
+						new Error(formatDraftCapacityError(draft, projectId, draftDate, zohoRemainingMinutes)),
+					);
+				} else {
+					setErroredDraftState(draft, error);
+				}
 				errorCount += 1;
 				processedCount += 1;
 				await writeGeneratedTimeLogsFile(inputFilePath, drafts);

@@ -45,6 +45,10 @@ export type Task = Record<string, unknown> & {
 	start_date?: string;
 	end_date?: string;
 	created_time?: string;
+	created_date?: string;
+	completed_date?: string;
+	closed_date?: string;
+	last_updated_time?: string;
 	log_hours?: TaskLogHours;
 	owners_and_work?: {
 		owners?: TaskOwner[];
@@ -282,7 +286,33 @@ function formatDurationDisplay(task: Task): string {
 	return `${displayValue} ${rawType} (${formatNumberToHours(getTaskDurationHours(task))})`;
 }
 
+function getTaskSortDate(task: Task): string {
+	const fallbackDateCandidates = [
+		task.start_date,
+		task.end_date,
+		task.created_time,
+		task.created_date,
+		task.completed_date,
+		task.closed_date,
+		task.last_updated_time,
+	];
+
+	for (const candidate of fallbackDateCandidates) {
+		const normalizedDate = formatDate(candidate);
+		if (normalizedDate !== 'N/A') {
+			return normalizedDate;
+		}
+	}
+
+	return '9999-12-31';
+}
+
 function compareTasks(a: Task, b: Task): number {
+	const startDateComparison = getTaskSortDate(a).localeCompare(getTaskSortDate(b));
+	if (startDateComparison !== 0) {
+		return startDateComparison;
+	}
+
 	const projectComparison = formatDisplayText(a.project?.name).localeCompare(
 		formatDisplayText(b.project?.name),
 	);
@@ -370,20 +400,44 @@ function getTaskThresholdHours(
 	return getMinimumAcceptableBillableHours(task, acceptableShortfallHours);
 }
 
+function getTaskOwnedFallbackDate(task: Task): string {
+	const fallbackDateCandidates = [
+		task.created_time,
+		task.created_date,
+		task.completed_date,
+		task.closed_date,
+		task.last_updated_time,
+	];
+
+	for (const candidate of fallbackDateCandidates) {
+		const normalizedDate = formatDate(candidate);
+		if (normalizedDate !== 'N/A') {
+			return normalizedDate;
+		}
+	}
+
+	return 'N/A';
+}
+
 function getEffectiveTaskDates(task: Task, runDate: Date): { dates: string[]; usedCreatedAtDate: boolean } {
 	const normalizedStartDate = formatDate(task.start_date);
 	const normalizedEndDate = formatDate(task.end_date);
 
-	if (normalizedStartDate !== 'N/A' || normalizedEndDate !== 'N/A') {
-		const startDate = normalizedStartDate !== 'N/A' ? normalizedStartDate : normalizedEndDate;
-		const endDate = normalizedEndDate !== 'N/A' ? normalizedEndDate : normalizedStartDate;
+	if (normalizedStartDate !== 'N/A') {
 		return {
-			dates: buildInclusiveDateRange(startDate, endDate),
+			dates: [normalizedStartDate],
 			usedCreatedAtDate: false,
 		};
 	}
 
-	const createdAtDate = formatDate(task.created_time);
+	if (normalizedEndDate !== 'N/A') {
+		return {
+			dates: [normalizedEndDate],
+			usedCreatedAtDate: false,
+		};
+	}
+
+	const createdAtDate = getTaskOwnedFallbackDate(task);
 	if (createdAtDate !== 'N/A') {
 		return {
 			dates: [createdAtDate],
@@ -395,29 +449,6 @@ function getEffectiveTaskDates(task: Task, runDate: Date): { dates: string[]; us
 		dates: [runDate.toISOString().slice(0, 10)],
 		usedCreatedAtDate: false,
 	};
-}
-
-function buildInclusiveDateRange(startDate: string, endDate: string): string[] {
-	const startParts = startDate.split('-').map(Number);
-	const endParts = endDate.split('-').map(Number);
-
-	if (startParts.length !== 3 || endParts.length !== 3) {
-		return [startDate];
-	}
-
-	const startValue = Date.UTC(startParts[0], startParts[1] - 1, startParts[2]);
-	const endValue = Date.UTC(endParts[0], endParts[1] - 1, endParts[2]);
-
-	if (!Number.isFinite(startValue) || !Number.isFinite(endValue) || endValue < startValue) {
-		return [startDate];
-	}
-
-	const dates: string[] = [];
-	for (let current = startValue; current <= endValue; current += 24 * 60 * 60 * 1000) {
-		dates.push(new Date(current).toISOString().slice(0, 10));
-	}
-
-	return dates;
 }
 
 function buildGeneratedTimeLogName(task: Task, index: number): string {
@@ -709,8 +740,9 @@ export async function filterTasksByEmailWork(
 
 	const allTasks = parsedData as Task[];
 	const matchingTasks = allTasks.filter((task) => taskMatchesEmail(task, normalizedEmail));
-	const excludedTasks = matchingTasks.filter((task) => isExcludedStatus(task));
-	const eligibleTasks = matchingTasks.filter((task) => !isExcludedStatus(task));
+	const sortedMatchingTasks = [...matchingTasks].sort(compareTasks);
+	const excludedTasks = sortedMatchingTasks.filter((task) => isExcludedStatus(task));
+	const eligibleTasks = sortedMatchingTasks.filter((task) => !isExcludedStatus(task));
 	const filteredTasks = eligibleTasks.filter((task) =>
 		taskIsUnderallocated(task, normalizedShortfallHours),
 	);
@@ -720,7 +752,7 @@ export async function filterTasksByEmailWork(
 
 	return {
 		allTasks,
-		matchingTasks,
+		matchingTasks: sortedMatchingTasks,
 		excludedTasks,
 		eligibleTasks,
 		filteredTasks,
@@ -907,8 +939,9 @@ export function generateTimeLogDraftsForFilteredTasks(
 	const normalizedShortfallHours = parseThresholdHours(options.acceptableShortfallHours);
 	const taskPlans: GeneratedTimeLogTaskPlan[] = [];
 	const generatedTimeLogs: GeneratedTimeLogDraft[] = [];
+	const sortedFilteredTasks = [...filteredTasks].sort(compareTasks);
 
-	for (const task of filteredTasks) {
+	for (const task of sortedFilteredTasks) {
 		const currentBillableHours = getTaskBillableHours(task);
 		const targetThresholdHours = getTaskThresholdHours(task, normalizedShortfallHours);
 		const additionalHoursNeeded = getAdditionalBillableHoursNeeded(task, normalizedShortfallHours);

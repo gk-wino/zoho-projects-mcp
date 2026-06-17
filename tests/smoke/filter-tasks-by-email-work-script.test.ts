@@ -115,6 +115,27 @@ async function main() {
 				created_by: { email: targetEmail, name: 'Geoffrey' },
 			},
 			{
+				id: 'task-8',
+				prefix: 'OMEGA-T1',
+				name: 'Multi day underallocated task',
+				project: { id: 'project-omega', name: 'Project Omega' },
+				tasklist: { id: 'tasklist-phase-1', name: 'Phase 1' },
+				status: { name: 'Completed' },
+				duration: { value: '3', type: 'days' },
+				start_date: '2026-06-07T04:00:00.000Z',
+				end_date: '2026-06-09T13:30:00.000Z',
+				created_time: '2026-06-05T09:00:00.000Z',
+				log_hours: {
+					billable_hours: '00:00',
+					non_billable_hours: '00:00',
+					total_hours: '00:00',
+				},
+				owners_and_work: {
+					owners: [{ email: targetEmail, name: 'Geoffrey' }],
+				},
+				created_by: { email: targetEmail, name: 'Geoffrey' },
+			},
+			{
 				id: 'task-2',
 				prefix: 'ALPHA-T2',
 				name: 'Threshold acceptable hours',
@@ -185,7 +206,7 @@ async function main() {
 				tasklist: { id: 'tasklist-general', name: 'General' },
 				status: { name: 'Completed' },
 				duration: { value: '0', type: 'days' },
-				created_time: '2026-06-05T10:15:00.000Z',
+				created_date: '2026-06-05',
 				log_hours: {
 					billable_hours: '00:00',
 					non_billable_hours: '00:00',
@@ -239,27 +260,6 @@ async function main() {
 				created_by: { email: 'someone.else@volane.com', name: 'Someone Else' },
 			},
 			{
-				id: 'task-8',
-				prefix: 'OMEGA-T1',
-				name: 'Multi day underallocated task',
-				project: { id: 'project-omega', name: 'Project Omega' },
-				tasklist: { id: 'tasklist-phase-1', name: 'Phase 1' },
-				status: { name: 'Completed' },
-				duration: { value: '3', type: 'days' },
-				start_date: '2026-06-07T04:00:00.000Z',
-				end_date: '2026-06-09T13:30:00.000Z',
-				created_time: '2026-06-05T09:00:00.000Z',
-				log_hours: {
-					billable_hours: '00:00',
-					non_billable_hours: '00:00',
-					total_hours: '00:00',
-				},
-				owners_and_work: {
-					owners: [{ email: targetEmail, name: 'Geoffrey' }],
-				},
-				created_by: { email: targetEmail, name: 'Geoffrey' },
-			},
-			{
 				id: 'task-9',
 				prefix: 'OMEGA-T2',
 				name: 'On hold creator match',
@@ -294,6 +294,21 @@ async function main() {
 		assert.deepEqual(
 			filterResult.filteredTasks.map((task) => task.id),
 			['task-1', 'task-5', 'task-6', 'task-8'],
+		);
+		const unsortedGenerationResult = generateTimeLogDraftsForFilteredTasks(
+			[fixtureTasks[1], fixtureTasks[0], fixtureTasks[5]],
+			{
+				randomFn: createRandomFn(...Array(30).fill(1)),
+				runDate: fixedRunDate,
+			},
+		);
+		assert.deepEqual(
+			unsortedGenerationResult.taskPlans.map((plan) => plan.task.id),
+			['task-1', 'task-5', 'task-8'],
+		);
+		assert.deepEqual(
+			unsortedGenerationResult.generatedTimeLogs.map((draft) => draft.module_id),
+			['task-1', 'task-5', 'task-8', 'task-8', 'task-8'],
 		);
 		assert.deepEqual(
 			filterResult.compliantTasks.map((task) => task.id),
@@ -368,8 +383,8 @@ async function main() {
 			})),
 			[
 				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
-				{ date: '2026-06-08', hours: '09:00', start_time: '09:00', end_time: '18:00' },
-				{ date: '2026-06-09', hours: '09:00', start_time: '09:00', end_time: '18:00' },
+				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
+				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
 			],
 		);
 		assert.ok(
@@ -479,7 +494,7 @@ async function main() {
 		assert.match(generatedSummary, /#### Task: OMEGA-T1 - Multi day underallocated task \(task-8\)/);
 		assert.match(generatedSummary, /\| 2026-06-05 \| 09:00 \| 09:00 \| 18:00 \| true \|/);
 		assert.match(generatedSummary, /\| 2026-06-01 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
-		assert.match(generatedSummary, /\| 2026-06-09 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
+		assert.match(generatedSummary, /\| 2026-06-07 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
 
 		process.env.HOURS_PER_DAY = '8';
 		process.env.ACCEPTABLE_SHORTFALL_HOURS = '1';
@@ -524,7 +539,7 @@ async function main() {
 		);
 
 		process.env.GENERATED_TIMELOG_MAX_DAILY_HOURS = '14';
-		const fourteenHourDrafts = generateTimeLogDraftsForTask(fixtureTasks[7], {
+		const fourteenHourDrafts = generateTimeLogDraftsForTask(fixtureTasks[1], {
 			randomFn: createRandomFn(1, 1, 1, 1, 1, 1, 1, 1),
 			runDate: fixedRunDate,
 		});

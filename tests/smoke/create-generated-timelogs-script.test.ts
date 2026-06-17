@@ -295,6 +295,276 @@ async function main() {
 		assert.equal(limitedWritten[2].status, 'completed');
 		assert.equal(limitedWritten[3].id, undefined);
 
+		const startDateTasksPath = path.join(tempDir, 'start-date-tasks.json');
+		await fs.writeFile(
+			startDateTasksPath,
+			`${JSON.stringify(
+				[
+					{
+						id: 'task-start-date',
+						project: { id: 'project-start-date', name: 'Project Start Date' },
+						start_date: '2026-05-20T08:00:00.000Z',
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		const startDateInputPath = path.join(tempDir, 'start-date-generated-timelogs.json');
+		await fs.writeFile(
+			startDateInputPath,
+			`${JSON.stringify(
+				[
+					{
+						project_id: 'project-start-date',
+						module_type: 'task',
+						module_id: 'task-start-date',
+						task_prefix: 'START-T1',
+						log_name: 'Uses task start date',
+						date: '2026-06-15',
+						bill_status: 'Billable',
+						hours: '08:30',
+						start_time: '08:30',
+						end_time: '17:00',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		const startDateCalls: ToolCall[] = [];
+		const startDateResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: startDateInputPath,
+			tasksFilePath: startDateTasksPath,
+			targetCount: 1,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+				client: {
+					callTool: async ({ name, arguments: args }) => {
+						startDateCalls.push({ name, arguments: args });
+
+						if (name === 'list_time_logs') {
+							return buildListResponse([]);
+						}
+
+						if (name === 'create_time_log') {
+							return buildToolResponse({ id: 'created-start-date-1' });
+						}
+
+						throw new Error(`Unexpected tool call: ${name}`);
+					},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+
+		assert.equal(startDateResult.processedCount, 1);
+		assert.equal(startDateResult.createdCount, 1);
+		const startDateListCall = startDateCalls.find((call) => call.name === 'list_time_logs');
+		assert.equal(startDateListCall?.arguments.start_date, '2026-05-20');
+		assert.equal(startDateListCall?.arguments.end_date, '2026-05-20');
+		const startDateCreateCall = startDateCalls.find((call) => call.name === 'create_time_log');
+		assert.equal(startDateCreateCall?.arguments.date, '2026-05-20');
+		assert.equal(
+			startDateCreateCall?.arguments.notes,
+			'Time log details: Start Time - 20/05/2026 08:30 AM End time 20/05/2026 05:00 PM Time spent - 08:30',
+		);
+		const startDateWritten = JSON.parse(await fs.readFile(startDateInputPath, 'utf8'));
+		assert.equal(startDateWritten[0].date, '2026-05-20');
+		assert.equal(startDateWritten[0].id, 'created-start-date-1');
+		assert.equal(startDateWritten[0].status, 'completed');
+
+		const priorityInputPath = path.join(tempDir, 'priority-generated-timelogs.json');
+		await fs.writeFile(
+			priorityInputPath,
+			`${JSON.stringify(
+				[
+					{
+						project_id: 'project-priority',
+						module_type: 'task',
+						module_id: 'task-priority',
+						task_prefix: 'PRIORITY-T1',
+						log_name: 'Retry later',
+						date: '2026-06-01',
+						bill_status: 'Billable',
+						hours: '08:30',
+						start_time: '08:30',
+						end_time: '17:00',
+						status: 'error',
+						error: 'previous failure',
+						used_created_at_date: false,
+					},
+					{
+						project_id: 'project-priority',
+						module_type: 'task',
+						module_id: 'task-priority',
+						task_prefix: 'PRIORITY-T2',
+						log_name: 'Fresh draft first',
+						date: '2026-06-01',
+						bill_status: 'Billable',
+						hours: '08:30',
+						start_time: '08:30',
+						end_time: '17:00',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		const priorityCalls: ToolCall[] = [];
+		const priorityResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: priorityInputPath,
+			targetCount: 1,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+				client: {
+					callTool: async ({ name, arguments: args }) => {
+						priorityCalls.push({ name, arguments: args });
+
+						if (name === 'list_time_logs') {
+							return buildListResponse([{ id: 'fresh-match-id', log_name: 'Fresh draft first' }]);
+						}
+
+						throw new Error(`Unexpected tool call: ${name}`);
+					},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+
+		assert.equal(priorityResult.processedCount, 1);
+		assert.equal(priorityResult.matchedExistingCount, 1);
+		assert.equal(priorityResult.createdCount, 0);
+		assert.equal(priorityResult.errorCount, 0);
+		const priorityWritten = JSON.parse(await fs.readFile(priorityInputPath, 'utf8'));
+		assert.equal(priorityWritten[0].status, 'error');
+		assert.equal(priorityWritten[1].status, 'completed');
+		assert.equal(priorityWritten[1].id, 'fresh-match-id');
+		assert.equal(
+			priorityCalls.every(
+				(call) => call.name === 'list_time_logs' && call.arguments.module_id === 'task-priority',
+			),
+			true,
+		);
+
+		const cappedInputPath = path.join(tempDir, 'capped-generated-timelogs.json');
+		await fs.writeFile(
+			cappedInputPath,
+			`${JSON.stringify(
+				[
+					{
+						project_id: 'project-cap',
+						module_type: 'task',
+						module_id: 'task-cap-a',
+						task_prefix: 'CAP-T0',
+						log_name: 'Existing completed 1',
+						date: '2026-06-05',
+						bill_status: 'Billable',
+						hours: '08:31',
+						start_time: '08:30',
+						end_time: '17:01',
+						status: 'completed',
+						id: 'completed-cap-1',
+						used_created_at_date: false,
+					},
+					{
+						project_id: 'project-cap',
+						module_type: 'task',
+						module_id: 'task-cap-b',
+						task_prefix: 'CAP-T0B',
+						log_name: 'Existing completed 2',
+						date: '2026-06-05',
+						bill_status: 'Billable',
+						hours: '08:55',
+						start_time: '08:30',
+						end_time: '17:25',
+						status: 'completed',
+						id: 'completed-cap-2',
+						used_created_at_date: false,
+					},
+					{
+						project_id: 'project-cap',
+						module_type: 'task',
+						module_id: 'task-cap',
+						task_prefix: 'CAP-T1',
+						log_name: 'Would exceed daily capacity',
+						date: '2026-06-05',
+						bill_status: 'Billable',
+						hours: '08:45',
+						start_time: '08:40',
+						end_time: '17:25',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		const cappedCalls: ToolCall[] = [];
+		const cappedResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: cappedInputPath,
+			targetCount: 0,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+				client: {
+					callTool: async ({ name, arguments: args }) => {
+						cappedCalls.push({ name, arguments: args });
+
+						if (name !== 'list_time_logs') {
+							throw new Error(`Unexpected tool call: ${name}`);
+						}
+
+						if (args.project_id !== 'project-cap') {
+							throw new Error(`Unexpected project scope: ${String(args.project_id)}`);
+						}
+
+						if (args.module_type === 'task' && args.module_id === 'task-cap') {
+							return buildListResponse([]);
+						}
+
+						throw new Error(`Unexpected list_time_logs arguments: ${JSON.stringify(args)}`);
+					},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+
+		assert.equal(cappedResult.processedCount, 1);
+		assert.equal(cappedResult.matchedExistingCount, 0);
+		assert.equal(cappedResult.createdCount, 0);
+		assert.equal(cappedResult.errorCount, 1);
+		assert.equal(
+			cappedCalls.filter((call) => call.name === 'list_time_logs').length,
+			1,
+		);
+		assert.equal(
+			cappedCalls.filter((call) => call.name === 'create_time_log').length,
+			0,
+		);
+		const cappedWritten = JSON.parse(await fs.readFile(cappedInputPath, 'utf8'));
+		assert.equal(cappedWritten[2].status, 'error');
+		assert.match(cappedWritten[2].error, /remaining/i);
+		assert.match(cappedWritten[2].error, /06:34/);
+
 		const fullInputPath = path.join(tempDir, 'full-generated-timelogs.json');
 		await fs.writeFile(
 			fullInputPath,
@@ -423,6 +693,15 @@ async function main() {
 								case 'project-gamma::task::task-gamma::1':
 									return buildListResponse([]);
 								default:
+									if (
+										!('module_type' in args) &&
+										args.page === 1 &&
+										args.start_date === args.end_date &&
+										['project-alpha', 'project-beta', 'project-gamma'].includes(String(args.project_id))
+									) {
+										return buildListResponse([]);
+									}
+
 									throw new Error(`Unexpected list_time_logs scope: ${groupKey}`);
 							}
 						}
