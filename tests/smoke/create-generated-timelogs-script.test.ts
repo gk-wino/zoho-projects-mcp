@@ -83,7 +83,7 @@ async function main() {
 	try {
 		delete process.env.TARGET_EMAIL;
 		delete process.env.TARGET_TIMELOG_COUNT;
-		delete process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP;
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = '';
 		process.env.ZOHO_ACCESS_TOKEN = 'test-access-token';
 		process.env.ZOHO_PORTAL_ID = 'test-portal-id';
 		process.env.ZOHO_REFRESH_TOKEN = 'test-refresh-token';
@@ -148,13 +148,13 @@ async function main() {
 			'notes',
 			'project_id',
 			'start_time',
-			'status',
 			'type',
 		]);
 		assert.equal(payload.type, 'task');
 		assert.equal(payload.item_id, 'task-1');
 		assert.equal(payload.start_time, '08:30 AM');
 		assert.equal(payload.end_time, '05:00 PM');
+		assert.equal('status' in payload, false);
 		assert.deepEqual(payload.force_allow, { overlap: true });
 		assert.equal(
 			payload.notes,
@@ -701,6 +701,77 @@ async function main() {
 		assert.equal(cappedWritten[2].status, 'error');
 		assert.match(cappedWritten[2].error, /remaining/i);
 		assert.match(cappedWritten[2].error, /06:34/);
+
+		const remoteCappedInputPath = path.join(tempDir, 'remote-capped-generated-timelogs.json');
+		await fs.writeFile(
+			remoteCappedInputPath,
+			`${JSON.stringify(
+				[
+					{
+						project_id: 'project-remote-cap',
+						module_type: 'task',
+						module_id: 'task-remote-cap',
+						task_prefix: 'REMOTE-T1',
+						log_name: 'Would exceed because of remote logs',
+						date: '2026-06-07',
+						bill_status: 'Billable',
+						hours: '06:00',
+						start_time: '09:00',
+						end_time: '15:00',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		const remoteCappedCalls: ToolCall[] = [];
+		globalThis.fetch = async () => {
+			throw new Error('Fetch should not be called when remote logs already exhaust capacity');
+		};
+		const remoteCappedResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: remoteCappedInputPath,
+			targetCount: 0,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+				client: {
+					callTool: async ({ name, arguments: args }) => {
+						remoteCappedCalls.push({ name, arguments: args });
+
+						if (name !== 'list_time_logs') {
+							throw new Error(`Unexpected tool call: ${name}`);
+						}
+
+						return buildListResponse([
+							{
+								id: 'remote-existing-1',
+								log_name: 'Existing remote hours',
+								date: '2026-06-07',
+								log_hour: '19:00',
+							},
+						]);
+					},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+
+		assert.equal(remoteCappedResult.processedCount, 1);
+		assert.equal(remoteCappedResult.createdCount, 0);
+		assert.equal(remoteCappedResult.errorCount, 1);
+		assert.equal(
+			remoteCappedCalls.filter((call) => call.name === 'list_time_logs').length,
+			1,
+		);
+		const remoteCappedWritten = JSON.parse(await fs.readFile(remoteCappedInputPath, 'utf8'));
+		assert.equal(remoteCappedWritten[0].status, 'error');
+		assert.match(remoteCappedWritten[0].error, /remaining/i);
+		assert.match(remoteCappedWritten[0].error, /05:00/);
 
 		const fullInputPath = path.join(tempDir, 'full-generated-timelogs.json');
 		await fs.writeFile(

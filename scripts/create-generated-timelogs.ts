@@ -453,6 +453,33 @@ function addProjectDateMinutes(
 	projectDateMinutes.set(projectDateKey, (projectDateMinutes.get(projectDateKey) || 0) + minutes);
 }
 
+function registerRemoteScopedLogMinutes(
+	projectDateMinutes: Map<string, number>,
+	projectId: string,
+	logs: TimeLogListEntry[],
+	countedLogIds: Set<string>,
+): void {
+	for (const log of logs) {
+		const logId = extractTimeLogId(log);
+		if (!logId || countedLogIds.has(logId)) {
+			continue;
+		}
+
+		const date = typeof log.date === 'string' ? log.date.trim() : '';
+		if (!date) {
+			continue;
+		}
+
+		const minutes = parseHoursToMinutes(log.log_hour ?? log.hours);
+		if (minutes <= 0) {
+			continue;
+		}
+
+		addProjectDateMinutes(projectDateMinutes, projectId, date, minutes);
+		countedLogIds.add(logId);
+	}
+}
+
 function buildResolvedProjectDateMinutes(
 	drafts: ExecutableGeneratedTimeLogDraft[],
 	taskLookup: Map<string, Task>,
@@ -688,7 +715,6 @@ export function buildBulkCreateTimeLogPayload(
 		start_time: formatZohoTime(draft.start_time),
 		end_time: formatZohoTime(draft.end_time),
 		notes: buildGeneratedTimeLogNotes(draft),
-		status: normalizeString(draft.status, 'status'),
 	};
 
 	if (moduleType !== 'general') {
@@ -978,6 +1004,7 @@ export async function executeGeneratedTimeLogs(
 	);
 	const scopedLogCache = new Map<string, TimeLogListEntry[]>();
 	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts, taskLookup);
+	const countedRemoteLogIds = new Set<string>();
 	const totalDrafts = drafts.length;
 	const eligibleBeforeRun = eligibleDrafts.length;
 	const skippedResolved = totalDrafts - eligibleBeforeRun;
@@ -1042,6 +1069,12 @@ export async function executeGeneratedTimeLogs(
 				if (!scopedLogs) {
 					scopedLogs = await listScopedTimeLogs(connection.client, scope, callToolWithDelay);
 					scopedLogCache.set(scopeKey, scopedLogs);
+					registerRemoteScopedLogMinutes(
+						resolvedProjectDateMinutes,
+						projectId,
+						scopedLogs,
+						countedRemoteLogIds,
+					);
 				}
 
 				const matchedLog = findMatchingTimeLog(draft, scopedLogs);
@@ -1051,14 +1084,8 @@ export async function executeGeneratedTimeLogs(
 						throw new Error('Matched existing timelog did not include an id.');
 					}
 
-						setCompletedDraftState(draft, matchedId);
-						addProjectDateMinutes(
-							resolvedProjectDateMinutes,
-							projectId,
-							effectiveDraftDate,
-							parseHoursToMinutes(draft.hours),
-						);
-						matchedExistingCount += 1;
+					setCompletedDraftState(draft, matchedId);
+					matchedExistingCount += 1;
 					processedCount += 1;
 					await writeGeneratedTimeLogsFile(inputFilePath, drafts);
 					continue;
