@@ -145,6 +145,7 @@ const GENERATED_END_MAX_HOUR = 18;
 const GENERATED_END_MAX_MINUTE = 0;
 const GENERATED_MINIMUM_END_HOUR = 17;
 const MAX_GENERATED_DRAFT_HOURS = 17 + 59 / 60;
+const MAX_GENERATED_MINUTES_PER_DATE = 18 * 60;
 const EXCLUDED_STATUSES = new Set(['open', 'on hold']);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -419,20 +420,55 @@ function getTaskOwnedFallbackDate(task: Task): string {
 	return 'N/A';
 }
 
-function getEffectiveTaskDates(task: Task, runDate: Date): { dates: string[]; usedCreatedAtDate: boolean } {
+function addDays(date: string, days: number): string {
+	const [year, month, day] = date.split('-').map(Number);
+	if (![year, month, day].every(Number.isFinite)) {
+		return date;
+	}
+
+	return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function isWeekend(date: string): boolean {
+	const [year, month, day] = date.split('-').map(Number);
+	if (![year, month, day].every(Number.isFinite)) {
+		return false;
+	}
+
+	const weekDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+	return weekDay === 0 || weekDay === 6;
+}
+
+function moveToNextWeekday(date: string): string {
+	let resolvedDate = date;
+	while (isWeekend(resolvedDate)) {
+		resolvedDate = addDays(resolvedDate, 1);
+	}
+
+	return resolvedDate;
+}
+
+function getNextWeekday(date: string): string {
+	return moveToNextWeekday(addDays(date, 1));
+}
+
+function getEffectiveTaskDateAnchor(
+	task: Task,
+	runDate: Date,
+): { date: string; usedCreatedAtDate: boolean } {
 	const normalizedStartDate = formatDate(task.start_date);
 	const normalizedEndDate = formatDate(task.end_date);
 
 	if (normalizedStartDate !== 'N/A') {
 		return {
-			dates: [normalizedStartDate],
+			date: normalizedStartDate,
 			usedCreatedAtDate: false,
 		};
 	}
 
 	if (normalizedEndDate !== 'N/A') {
 		return {
-			dates: [normalizedEndDate],
+			date: normalizedEndDate,
 			usedCreatedAtDate: false,
 		};
 	}
@@ -440,15 +476,77 @@ function getEffectiveTaskDates(task: Task, runDate: Date): { dates: string[]; us
 	const createdAtDate = getTaskOwnedFallbackDate(task);
 	if (createdAtDate !== 'N/A') {
 		return {
-			dates: [createdAtDate],
+			date: createdAtDate,
 			usedCreatedAtDate: true,
 		};
 	}
 
 	return {
-		dates: [runDate.toISOString().slice(0, 10)],
+		date: runDate.toISOString().slice(0, 10),
 		usedCreatedAtDate: false,
 	};
+}
+
+function buildSequentialWeekdayDates(startDate: string, count: number): string[] {
+	if (count <= 0) {
+		return [];
+	}
+
+	const dates: string[] = [];
+	let currentDate = moveToNextWeekday(startDate);
+
+	for (let index = 0; index < count; index += 1) {
+		dates.push(currentDate);
+		currentDate = getNextWeekday(currentDate);
+	}
+
+	return dates;
+}
+
+function assignDraftDatesWithConstraints(
+	candidateDates: string[],
+	draftDurationsMinutes: number[],
+	dateLoadMinutes: Map<string, number>,
+): string[] {
+	const assignedDates: string[] = [];
+
+	for (let index = 0; index < candidateDates.length; index += 1) {
+		const previousAssignedDate = assignedDates[index - 1];
+		let resolvedDate = moveToNextWeekday(candidateDates[index]);
+
+		if (previousAssignedDate && resolvedDate <= previousAssignedDate) {
+			resolvedDate = getNextWeekday(previousAssignedDate);
+		}
+
+		const draftDurationMinutes = draftDurationsMinutes[index] ?? 0;
+		while ((dateLoadMinutes.get(resolvedDate) || 0) + draftDurationMinutes > MAX_GENERATED_MINUTES_PER_DATE) {
+			resolvedDate = getNextWeekday(resolvedDate);
+		}
+
+		assignedDates.push(resolvedDate);
+		dateLoadMinutes.set(resolvedDate, (dateLoadMinutes.get(resolvedDate) || 0) + draftDurationMinutes);
+	}
+
+	return assignedDates;
+}
+
+function compareGeneratedTimeLogs(a: GeneratedTimeLogDraft, b: GeneratedTimeLogDraft): number {
+	const dateComparison = a.date.localeCompare(b.date);
+	if (dateComparison !== 0) {
+		return dateComparison;
+	}
+
+	const projectComparison = a.project_id.localeCompare(b.project_id);
+	if (projectComparison !== 0) {
+		return projectComparison;
+	}
+
+	const taskComparison = a.task_prefix.localeCompare(b.task_prefix);
+	if (taskComparison !== 0) {
+		return taskComparison;
+	}
+
+	return a.log_name.localeCompare(b.log_name);
 }
 
 function buildGeneratedTimeLogName(task: Task, index: number): string {
@@ -918,15 +1016,16 @@ export function generateTimeLogDraftsForTask(
 		return [];
 	}
 
-	const planningDates = getEffectiveTaskDates(task, runDate);
+	const anchor = getEffectiveTaskDateAnchor(task, runDate);
+	const planningDates = buildSequentialWeekdayDates(anchor.date, durations.length);
 
 	return durations.map((durationMinutes, index) =>
 		buildDraftFromMinutes(
 			task,
-			planningDates.dates[Math.min(index, planningDates.dates.length - 1)],
+			planningDates[index],
 			durationMinutes,
 			index,
-			planningDates.usedCreatedAtDate,
+			anchor.usedCreatedAtDate,
 			randomFn,
 		),
 	);
@@ -940,6 +1039,7 @@ export function generateTimeLogDraftsForFilteredTasks(
 	const taskPlans: GeneratedTimeLogTaskPlan[] = [];
 	const generatedTimeLogs: GeneratedTimeLogDraft[] = [];
 	const sortedFilteredTasks = [...filteredTasks].sort(compareTasks);
+	const dateLoadMinutes = new Map<string, number>();
 
 	for (const task of sortedFilteredTasks) {
 		const currentBillableHours = getTaskBillableHours(task);
@@ -955,15 +1055,29 @@ export function generateTimeLogDraftsForFilteredTasks(
 			continue;
 		}
 
+		const assignedDates = assignDraftDatesWithConstraints(
+			generatedDrafts.map((draft) => draft.date),
+			generatedDrafts.map((draft) => hoursToMinutes(parseHourValue(draft.hours))),
+			dateLoadMinutes,
+		);
+		const scheduledDrafts = generatedDrafts
+			.map((draft, index) => ({
+				...draft,
+				date: assignedDates[index],
+			}))
+			.sort(compareGeneratedTimeLogs);
+
 		taskPlans.push({
 			task,
 			currentBillableHours,
 			targetThresholdHours,
 			additionalHoursNeeded,
-			generatedDrafts,
+			generatedDrafts: scheduledDrafts,
 		});
-		generatedTimeLogs.push(...generatedDrafts);
+		generatedTimeLogs.push(...scheduledDrafts);
 	}
+
+	generatedTimeLogs.sort(compareGeneratedTimeLogs);
 
 	return {
 		tasksNeedingGeneratedTimeLogs: taskPlans.length,

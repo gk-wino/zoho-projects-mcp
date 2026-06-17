@@ -318,6 +318,57 @@ async function main() {
 		assert.equal(getAdditionalBillableHoursNeeded(filterResult.filteredTasks[1]), 0);
 		assert.equal(getAdditionalBillableHoursNeeded(filterResult.filteredTasks[2]), 0);
 		assert.equal(getAdditionalBillableHoursNeeded(filterResult.filteredTasks[3]), 24.5);
+		const overlapTasks = [
+			{
+				id: 'overlap-1',
+				prefix: 'OVERLAP-T1',
+				name: 'Overlap task 1',
+				project: { id: 'project-overlap', name: 'Project Overlap' },
+				tasklist: { id: 'tasklist-overlap', name: 'Overlap' },
+				status: { name: 'Completed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-01T04:00:00.000Z',
+				log_hours: { billable_hours: '00:00', non_billable_hours: '00:00', total_hours: '00:00' },
+			},
+			{
+				id: 'overlap-2',
+				prefix: 'OVERLAP-T2',
+				name: 'Overlap task 2',
+				project: { id: 'project-overlap', name: 'Project Overlap' },
+				tasklist: { id: 'tasklist-overlap', name: 'Overlap' },
+				status: { name: 'Completed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-01T04:00:00.000Z',
+				log_hours: { billable_hours: '00:00', non_billable_hours: '00:00', total_hours: '00:00' },
+			},
+			{
+				id: 'overlap-3',
+				prefix: 'OVERLAP-T3',
+				name: 'Overlap task 3',
+				project: { id: 'project-overlap', name: 'Project Overlap' },
+				tasklist: { id: 'tasklist-overlap', name: 'Overlap' },
+				status: { name: 'Completed' },
+				duration: { value: '1', type: 'days' },
+				start_date: '2026-06-01T04:00:00.000Z',
+				log_hours: { billable_hours: '00:00', non_billable_hours: '00:00', total_hours: '00:00' },
+			},
+		];
+		const overlapGenerationResult = generateTimeLogDraftsForFilteredTasks(overlapTasks, {
+			randomFn: createRandomFn(...Array(24).fill(1)),
+			runDate: fixedRunDate,
+		});
+		assert.deepEqual(
+			overlapGenerationResult.generatedTimeLogs.map((draft) => ({
+				module_id: draft.module_id,
+				date: draft.date,
+				hours: draft.hours,
+			})),
+			[
+				{ module_id: 'overlap-1', date: '2026-06-01', hours: '09:00' },
+				{ module_id: 'overlap-2', date: '2026-06-01', hours: '09:00' },
+				{ module_id: 'overlap-3', date: '2026-06-02', hours: '09:00' },
+			],
+		);
 
 		const filteredSummary = formatFilteredTasksByEmailSummary({
 			email: targetEmail,
@@ -382,10 +433,14 @@ async function main() {
 				end_time: draft.end_time,
 			})),
 			[
-				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
-				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
-				{ date: '2026-06-07', hours: '09:00', start_time: '09:00', end_time: '18:00' },
+				{ date: '2026-06-08', hours: '09:00', start_time: '09:00', end_time: '18:00' },
+				{ date: '2026-06-09', hours: '09:00', start_time: '09:00', end_time: '18:00' },
+				{ date: '2026-06-10', hours: '09:00', start_time: '09:00', end_time: '18:00' },
 			],
+		);
+		assert.deepEqual(
+			generationResult.generatedTimeLogs.map((draft) => draft.date),
+			['2026-06-01', '2026-06-05', '2026-06-08', '2026-06-09', '2026-06-10'],
 		);
 		assert.ok(
 			generationResult.generatedTimeLogs.every(
@@ -494,7 +549,8 @@ async function main() {
 		assert.match(generatedSummary, /#### Task: OMEGA-T1 - Multi day underallocated task \(task-8\)/);
 		assert.match(generatedSummary, /\| 2026-06-05 \| 09:00 \| 09:00 \| 18:00 \| true \|/);
 		assert.match(generatedSummary, /\| 2026-06-01 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
-		assert.match(generatedSummary, /\| 2026-06-07 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
+		assert.match(generatedSummary, /\| 2026-06-08 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
+		assert.match(generatedSummary, /\| 2026-06-10 \| 09:00 \| 09:00 \| 18:00 \| false \|/);
 
 		process.env.HOURS_PER_DAY = '8';
 		process.env.ACCEPTABLE_SHORTFALL_HOURS = '1';
@@ -520,8 +576,12 @@ async function main() {
 		assert.deepEqual(
 			envGenerationResult.generatedTimeLogs
 				.filter((draft) => draft.module_id === 'task-8')
-				.map((draft) => draft.hours),
-			['09:00', '09:00', '09:00'],
+				.map((draft) => ({ date: draft.date, hours: draft.hours })),
+			[
+				{ date: '2026-06-08', hours: '09:00' },
+				{ date: '2026-06-09', hours: '09:00' },
+				{ date: '2026-06-10', hours: '09:00' },
+			],
 		);
 		assert.ok(
 			envGenerationResult.generatedTimeLogs.every(
@@ -544,6 +604,10 @@ async function main() {
 			runDate: fixedRunDate,
 		});
 		assert.equal(fourteenHourDrafts.length, 3);
+		assert.deepEqual(
+			fourteenHourDrafts.map((draft) => draft.date),
+			['2026-06-08', '2026-06-09', '2026-06-10'],
+		);
 		assert.ok(
 			fourteenHourDrafts.every(
 				(draft) =>
