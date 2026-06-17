@@ -169,6 +169,7 @@ Key env vars:
 - `TARGET_EMAIL`
 - `TARGET_TIMELOG_COUNT`
 - `GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP`
+  When truthy, the script includes `force_allow.overlap=true` in each bulk log object and skips the local 24-hour/day precheck so Zoho can evaluate the overlap override itself.
 - `ZOHO_ACCESS_TOKEN`
 - `ZOHO_PORTAL_ID`
 

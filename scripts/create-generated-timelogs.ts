@@ -998,6 +998,7 @@ export async function executeGeneratedTimeLogs(
 	const scopedLogCache = new Map<string, TimeLogListEntry[]>();
 	const resolvedProjectDateMinutes = buildResolvedProjectDateMinutes(drafts, taskLookup);
 	const countedRemoteLogIds = new Set<string>();
+	const forceAllowOverlap = getConfiguredGeneratedTimeLogForceAllowOverlap();
 	const totalDrafts = drafts.length;
 	const eligibleBeforeRun = eligibleDrafts.length;
 	const skippedResolved = totalDrafts - eligibleBeforeRun;
@@ -1088,7 +1089,7 @@ export async function executeGeneratedTimeLogs(
 				const draftMinutes = parseHoursToMinutes(draft.hours);
 				const usedMinutes = resolvedProjectDateMinutes.get(projectDateKey) || 0;
 				const remainingMinutes = Math.max(0, DAILY_LOG_LIMIT_MINUTES - usedMinutes);
-				if (draftMinutes > remainingMinutes) {
+				if (!forceAllowOverlap && draftMinutes > remainingMinutes) {
 					throw new Error(
 						formatDraftCapacityError(draft, projectId, effectiveDraftDate, remainingMinutes),
 					);

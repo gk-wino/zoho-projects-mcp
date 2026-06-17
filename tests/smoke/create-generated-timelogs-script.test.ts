@@ -778,6 +778,123 @@ async function main() {
 		assert.match(remoteCappedWritten[0].error, /remaining/i);
 		assert.match(remoteCappedWritten[0].error, /05:00/);
 
+		const remoteForceAllowedInputPath = path.join(tempDir, 'remote-force-allowed-generated-timelogs.json');
+		await fs.writeFile(
+			remoteForceAllowedInputPath,
+			`${JSON.stringify(
+				[
+					{
+						project_id: 'project-remote-force',
+						module_type: 'task',
+						module_id: 'task-remote-force',
+						task_prefix: 'REMOTE-FORCE-T1',
+						log_name: 'Should bypass local daily capacity guard',
+						date: '2026-06-08',
+						bill_status: 'Billable',
+						hours: '06:00',
+						start_time: '09:00',
+						end_time: '03:00',
+						status: 'Approved',
+						used_created_at_date: false,
+					},
+				],
+				null,
+				2,
+			)}\n`,
+			'utf8',
+		);
+
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = 'true';
+		const remoteForceAllowedCalls: ToolCall[] = [];
+		const remoteForceAllowedFetchBodies: string[] = [];
+		let remoteForceAllowedListCount = 0;
+		globalThis.fetch = async (input, init) => {
+			const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+			if (!url.endsWith('/addbulktimelogs')) {
+				throw new Error(`Unexpected fetch request: ${url}`);
+			}
+
+			remoteForceAllowedFetchBodies.push(String(init?.body || ''));
+			return buildFetchResponse({
+				status: 200,
+				body: {
+					time_logs: [
+						{
+							log_details: [
+								{
+									id: 'created-remote-force-1',
+									log_name: 'Should bypass local daily capacity guard',
+								},
+							],
+						},
+					],
+				},
+			});
+		};
+		const remoteForceAllowedResult = await executeGeneratedTimeLogs(undefined, {
+			inputFilePath: remoteForceAllowedInputPath,
+			targetCount: 0,
+			requestDelayMs: 5,
+			sleepFn: async () => {},
+			clientFactory: async () => ({
+				client: {
+					callTool: async ({ name, arguments: args }) => {
+						remoteForceAllowedCalls.push({ name, arguments: args });
+
+						if (name !== 'list_time_logs') {
+							throw new Error(`Unexpected tool call: ${name}`);
+						}
+
+						remoteForceAllowedListCount += 1;
+						if (remoteForceAllowedListCount === 1) {
+							return buildListResponse([
+								{
+									id: 'remote-force-existing-1',
+									log_name: 'Existing remote hours',
+									date: '2026-06-08',
+									log_hour: '19:00',
+								},
+							]);
+						}
+
+						return buildListResponse([
+							{
+								id: 'remote-force-existing-1',
+								log_name: 'Existing remote hours',
+								date: '2026-06-08',
+								log_hour: '19:00',
+							},
+							{
+								id: 'created-remote-force-1',
+								log_name: 'Should bypass local daily capacity guard',
+							},
+						]);
+					},
+					close: async () => {},
+				},
+				close: async () => {},
+			}),
+		});
+
+		assert.equal(remoteForceAllowedResult.processedCount, 1);
+		assert.equal(remoteForceAllowedResult.createdCount, 1);
+		assert.equal(remoteForceAllowedResult.errorCount, 0);
+		assert.equal(
+			remoteForceAllowedCalls.filter((call) => call.name === 'list_time_logs').length >= 2,
+			true,
+		);
+		assert.equal(remoteForceAllowedFetchBodies.length, 1);
+		const remoteForceAllowedPayload = JSON.parse(
+			new URLSearchParams(remoteForceAllowedFetchBodies[0]).get('log_object') || '[]',
+		) as Array<Record<string, unknown>>;
+		assert.deepEqual(remoteForceAllowedPayload[0]?.force_allow, { overlap: true });
+		const remoteForceAllowedWritten = JSON.parse(
+			await fs.readFile(remoteForceAllowedInputPath, 'utf8'),
+		);
+		assert.equal(remoteForceAllowedWritten[0].status, 'completed');
+		assert.equal(remoteForceAllowedWritten[0].id, 'created-remote-force-1');
+		process.env.GENERATED_TIMELOG_FORCE_ALLOW_OVERLAP = '';
+
 		const fullInputPath = path.join(tempDir, 'full-generated-timelogs.json');
 		await fs.writeFile(
 			fullInputPath,
